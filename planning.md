@@ -13,3 +13,27 @@ The app will auto detect when connection is good and will send live voice when p
 - Implement network quality detection to switch between live voice and snippet-based transmission.
 - Optimize data transmission to handle poor network conditions efficiently.
 - Use ricky0123/vad for voice activity detection.
+
+## example for including the vad
+
+```javascript
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.wasm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.31/dist/bundle.min.js"></script>
+
+<script>
+  async function main() {
+    const myvad = await vad.MicVAD.new({
+      onSpeechStart: () => console.log("Speech start"),
+      onSpeechEnd: (audio) => console.log("Speech end", audio),
+      onnxWASMBasePath:
+        "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/",
+      baseAssetPath:
+        "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.31/dist/",
+    });
+
+    myvad.start();
+  }
+
+  main();
+</script>
+```

@@ -1,15 +1,9 @@
-const state = {
-	peer: null,
-	localStream: null,
-	offerIceCandidates: [],
-	answerIceCandidates: [],
-	generatedOfferToken: "",
-	generatedAnswerToken: "",
-	localAudioMuted: false,
-};
+import { WebRTCManager } from "./webrtc.js";
+import { VADManager } from "./vad.js";
 
-const config = {
-	iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+const state = {
+	webrtc: null,
+	vad: null,
 };
 
 const startMicBtn = document.getElementById("startMicBtn");
@@ -23,293 +17,85 @@ const answerInput = document.getElementById("answerInput");
 const statusLog = document.getElementById("statusLog");
 const remoteAudio = document.getElementById("remoteAudio");
 
-/**
- * Adds a status message to the visible log panel.
- * @param {string} message - Human-readable connection update.
- */
 function setStatus(message) {
 	statusLog.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
 }
 
-/**
- * Creates a peer connection and attaches the local microphone track.
- * @returns {RTCPeerConnection} The configured peer connection instance.
- */
-function createPeerConnection() {
-	if (state.peer) {
-		return state.peer;
-	}
-
-	const peer = new RTCPeerConnection(config);
-	state.peer = peer;
-
-	peer.ontrack = (event) => {
-		const [remoteStream] = event.streams;
-		if (remoteStream) {
-			remoteAudio.srcObject = remoteStream;
-			setStatus("Remote audio stream connected.");
-		}
-	};
-
-	peer.onconnectionstatechange = () => {
-		const { connectionState } = peer;
-		if (connectionState === "connected") {
-			setStatus("WebRTC connection established. Voice is live.");
-		}
-		if (connectionState === "failed") {
-			setStatus("Connection failed. Try generating a fresh token pair.");
-		}
-		if (connectionState === "disconnected") {
-			setStatus("Connection disconnected.");
-		}
-	};
-
-	peer.onicecandidate = (event) => {
-		if (!event.candidate) {
-			return;
-		}
-
-		const candidate = {
-			candidate: event.candidate.candidate,
-			sdpMid: event.candidate.sdpMid,
-			sdpMLineIndex: event.candidate.sdpMLineIndex,
-			usernameFragment: event.candidate.usernameFragment,
-		};
-
-		if (peer.localDescription && peer.localDescription.type === "offer") {
-			state.offerIceCandidates.push(candidate);
-		} else if (
-			peer.localDescription &&
-			peer.localDescription.type === "answer"
-		) {
-			state.answerIceCandidates.push(candidate);
-		}
-	};
-
-	if (state.localStream) {
-		state.localStream
-			.getTracks()
-			.forEach((track) => peer.addTrack(track, state.localStream));
-	}
-
-	return peer;
-}
-
-/**
- * Waits until the ICE gathering phase is complete for the active peer connection.
- * @returns {Promise<void>} Resolves when ICE collection finishes.
- */
-function waitForIceGathering() {
-	return new Promise((resolve) => {
-		const peer = state.peer;
-		if (!peer) {
-			resolve();
-			return;
-		}
-
-		if (peer.iceGatheringState === "complete") {
-			resolve();
-			return;
-		}
-
-		const onStateChange = () => {
-			if (peer.iceGatheringState === "complete") {
-				peer.removeEventListener("icegatheringstatechange", onStateChange);
-				resolve();
-			}
-		};
-
-		peer.addEventListener("icegatheringstatechange", onStateChange);
-	});
-}
-
-/**
- * Adds ICE candidates received from the remote client to the live connection.
- * @param {Array<Object>} candidates - Candidate objects from the other side.
- * @returns {Promise<void>} Resolves after all candidates are added.
- */
-async function applyCandidates(candidates = []) {
-	const peer = state.peer;
-	if (!peer || !candidates.length) {
-		return;
-	}
-
-	for (const candidate of candidates) {
-		try {
-			await peer.addIceCandidate(new RTCIceCandidate(candidate));
-		} catch (error) {
-			console.warn("Failed to add ICE candidate:", error);
-		}
-	}
-}
-
-/**
- * Ensures the browser microphone is active before beginning a call.
- * @returns {Promise<void>} Resolves once the microphone stream is ready.
- */
-async function startMicrophone() {
-	if (state.localStream) {
-		setStatus("Microphone is already active.");
-		return;
-	}
-
-	try {
-		const stream = await navigator.mediaDevices.getUserMedia({
-			audio: true,
-			video: false,
+function ensureManagers() {
+	if (!state.webrtc) {
+		state.webrtc = new WebRTCManager({
+			onStatus: setStatus,
+			onRemoteSnippet: () => {
+				// Remote snippets are played through the WebRTC data channel callback and
+				// do not require a separate audio element in the DOM.
+			},
 		});
+	}
 
-		state.localStream = stream;
-		if (state.peer) {
-			stream.getTracks().forEach((track) => state.peer.addTrack(track, stream));
-		}
-		setStatus("Microphone access granted.");
-	} catch (error) {
-		console.error(error);
-		setStatus(
-			"Microphone access was blocked. Allow microphone access and try again.",
-		);
+	if (!state.vad) {
+		state.vad = new VADManager({
+			onStatus: setStatus,
+			onSpeechStart: () => {
+				setStatus("Speech detected. Capturing VAD snippet.");
+			},
+			onSpeechEnd: async (audioChunk) => {
+				if (!audioChunk) {
+					return;
+				}
+
+				const floatArray =
+					audioChunk instanceof Float32Array
+						? audioChunk
+						: new Float32Array(audioChunk);
+
+				const int16Array = new Int16Array(floatArray.length);
+				for (let index = 0; index < floatArray.length; index += 1) {
+					const clamped = Math.max(-1, Math.min(1, floatArray[index]));
+					int16Array[index] = Math.round(clamped * 32767);
+				}
+
+				const buffer = int16Array.buffer;
+				const sent = await state.webrtc.sendSnippet(buffer);
+				if (sent) {
+					setStatus("Speech snippet sent over the WebRTC data channel.");
+				}
+			},
+		});
 	}
 }
 
-/**
- * Generates an offer token for the first client in the call.
- * @returns {Promise<string>} The JSON offer token ready to pass to the other user.
- */
+async function startMicrophone() {
+	ensureManagers();
+	await state.vad.startMic();
+}
+
 async function generateOfferToken() {
-	await startMicrophone();
-
-	const peer = createPeerConnection();
-	const offer = await peer.createOffer();
-	await peer.setLocalDescription(offer);
-	await waitForIceGathering();
-
-	const token = {
-		version: 1,
-		type: "offer",
-		sdp: peer.localDescription.sdp,
-		candidates: state.offerIceCandidates.slice(),
-	};
-
-	state.generatedOfferToken = JSON.stringify(token, null, 2);
+	ensureManagers();
+	await state.vad.startMic();
+	state.webrtc.createPeerConnection();
+	const token = await state.webrtc.generateOfferToken();
 	offerInput.value = "";
 	setStatus("Offer token generated. Copy it and send it to the second client.");
-	return state.generatedOfferToken;
+	return token;
 }
 
-/**
- * Parses a remote token and handles both offer and answer payloads.
- * @returns {Promise<string | null>} The answer token if an offer is received.
- */
 async function processIncomingToken() {
+	ensureManagers();
+	await state.vad.startMic();
 	const rawText = offerInput.value.trim();
-
-	if (!rawText) {
-		setStatus("Paste a valid token before connecting.");
-		return null;
-	}
-
-	let token;
-
-	try {
-		token = JSON.parse(rawText);
-	} catch (error) {
-		setStatus("The pasted token is not valid JSON.");
-		console.error(error);
-		return null;
-	}
-
-	if (!token || !token.type || !token.sdp) {
-		setStatus("The token is missing the required WebRTC information.");
-		return null;
-	}
-
-	await startMicrophone();
-
-	if (token.type === "offer") {
-		const peer = createPeerConnection();
-		state.answerIceCandidates = [];
-		await peer.setRemoteDescription(
-			new RTCSessionDescription({ type: "offer", sdp: token.sdp }),
-		);
-		await applyCandidates(token.candidates || []);
-
-		const answer = await peer.createAnswer();
-		await peer.setLocalDescription(answer);
-		await waitForIceGathering();
-
-		const answerToken = {
-			version: 1,
-			type: "answer",
-			sdp: peer.localDescription.sdp,
-			candidates: state.answerIceCandidates.slice(),
-		};
-
-		state.generatedAnswerToken = JSON.stringify(answerToken, null, 2);
+	const token = await state.webrtc.processIncomingToken(rawText);
+	if (token) {
 		answerInput.value = "";
-		setStatus("Answer token created. Copy it and send it back to the caller.");
-		return state.generatedAnswerToken;
 	}
-
-	if (token.type === "answer") {
-		if (!state.peer) {
-			setStatus("No active offer exists yet. Generate an offer token first.");
-			return null;
-		}
-
-		await state.peer.setRemoteDescription(
-			new RTCSessionDescription({ type: "answer", sdp: token.sdp }),
-		);
-		await applyCandidates(token.candidates || []);
-		setStatus("Answer received. Call is connected.");
-		return null;
-	}
-
-	setStatus("Unknown token type. Expected offer or answer.");
-	return null;
+	return token;
 }
 
-/**
- * Completes a peer connection using the answer token generated by the receiving client.
- * @returns {Promise<void>} Resolves after the remote answer is applied.
- */
 async function completeOfferWithAnswer() {
+	ensureManagers();
 	const rawText = answerInput.value.trim();
-	if (!rawText) {
-		setStatus("Paste the answer token before completing the call.");
-		return;
-	}
-
-	let token;
-	try {
-		token = JSON.parse(rawText);
-	} catch (error) {
-		setStatus("The pasted answer token is not valid JSON.");
-		console.error(error);
-		return;
-	}
-
-	if (!token || !token.type || token.type !== "answer" || !token.sdp) {
-		setStatus("The pasted answer token looks invalid.");
-		return;
-	}
-
-	if (!state.peer) {
-		setStatus("There is no active offer to complete. Generate an offer first.");
-		return;
-	}
-
-	await state.peer.setRemoteDescription(
-		new RTCSessionDescription({ type: "answer", sdp: token.sdp }),
-	);
-	await applyCandidates(token.candidates || []);
-	setStatus("Answer applied. The call is now connected.");
+	await state.webrtc.completeOfferWithAnswer(rawText);
 }
 
-/**
- * Copies the provided text to the clipboard.
- * @param {string} value - String to copy.
- */
 async function copyToClipboard(value) {
 	if (!value) {
 		setStatus("There is nothing to copy yet.");
@@ -326,21 +112,23 @@ async function copyToClipboard(value) {
 }
 
 async function copyGeneratedOffer() {
-	if (!state.generatedOfferToken) {
+	ensureManagers();
+	if (!state.webrtc.generatedOfferToken) {
 		setStatus("Generate an offer token first.");
 		return;
 	}
 
-	await copyToClipboard(state.generatedOfferToken);
+	await copyToClipboard(state.webrtc.generatedOfferToken);
 }
 
 async function copyGeneratedAnswer() {
-	if (!state.generatedAnswerToken) {
+	ensureManagers();
+	if (!state.webrtc.generatedAnswerToken) {
 		setStatus("Generate an answer token first.");
 		return;
 	}
 
-	await copyToClipboard(state.generatedAnswerToken);
+	await copyToClipboard(state.webrtc.generatedAnswerToken);
 }
 
 startMicBtn.addEventListener("click", async () => {
@@ -368,5 +156,29 @@ completeCallBtn.addEventListener("click", async () => {
 });
 
 setStatus(
-	"Ready to start a call. Create an offer token on one client and paste it on the second client.",
+	"Ready to start a call. Generate an offer, copy it, transfer it manually, then complete the call with the answer token.",
 );
+
+async function initializeVAD() {
+	if (!window.vad) {
+		setStatus(
+			"VAD library is still loading. Please wait a moment and try again.",
+		);
+		return;
+	}
+
+	ensureManagers();
+	try {
+		await state.vad.initVAD();
+		setStatus(
+			"VAD is ready. Use the call flow to establish the WebRTC data channel.",
+		);
+	} catch (error) {
+		console.error(error);
+		setStatus(
+			"The VAD library could not initialize. Check the browser console for details.",
+		);
+	}
+}
+
+initializeVAD();
