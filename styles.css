@@ -1,0 +1,159 @@
+:root {
+	--bg: #0b1020;
+	--panel: #121a2b;
+	--panel-alt: #1a2440;
+	--line: #2b3b64;
+	--text: #ecf3ff;
+	--muted: #a7b7d6;
+	--primary: #70d6ff;
+	--primary-strong: #3fb4ef;
+	--success: #7fe3a6;
+	--warning: #ffd166;
+	--danger: #ff7d7d;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	min-height: 100vh;
+	font-family: Arial, Helvetica, sans-serif;
+	background: radial-gradient(circle at top, #172540 0%, var(--bg) 45%);
+	color: var(--text);
+}
+
+button,
+textarea {
+	font: inherit;
+}
+
+.app-shell {
+	width: min(1100px, calc(100% - 32px));
+	margin: 0 auto;
+	padding: 32px 0 48px;
+}
+
+.page-header {
+	margin-bottom: 24px;
+}
+
+.eyebrow {
+	margin: 0 0 8px;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	font-size: 0.72rem;
+	color: var(--primary);
+}
+
+h1,
+h2 {
+	margin: 0 0 16px;
+}
+
+h1 {
+	font-size: clamp(2rem, 4vw, 3rem);
+}
+
+.panel {
+	background: rgba(18, 26, 43, 0.9);
+	border: 1px solid var(--line);
+	border-radius: 16px;
+	padding: 20px;
+	margin-bottom: 20px;
+	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.two-column {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+	gap: 20px;
+}
+
+button {
+	border: none;
+	border-radius: 10px;
+	padding: 12px 16px;
+	font-weight: 700;
+	cursor: pointer;
+	transition:
+		transform 0.15s ease,
+		opacity 0.15s ease;
+}
+
+button:hover {
+	transform: translateY(-1px);
+}
+
+button:active {
+	transform: translateY(0);
+}
+
+.primary {
+	background: linear-gradient(
+		180deg,
+		var(--primary) 0%,
+		var(--primary-strong) 100%
+	);
+	color: #06131a;
+}
+
+.secondary {
+	background: var(--panel-alt);
+	border: 1px solid var(--line);
+	color: var(--text);
+}
+
+.button-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	margin-top: 12px;
+}
+
+textarea {
+	width: 100%;
+	margin-top: 14px;
+	padding: 14px 16px;
+	border-radius: 12px;
+	border: 1px solid var(--line);
+	background: rgba(5, 9, 19, 0.9);
+	color: var(--text);
+	resize: vertical;
+	min-height: 160px;
+}
+
+.help-text {
+	margin-top: 12px;
+	color: var(--muted);
+	line-height: 1.5;
+}
+
+.status-log {
+	min-height: 80px;
+	padding: 14px 16px;
+	border-radius: 12px;
+	border: 1px solid var(--line);
+	background: rgba(5, 9, 19, 0.9);
+	color: var(--text);
+	line-height: 1.5;
+	white-space: pre-wrap;
+}
+
+audio {
+	display: block;
+	width: 100%;
+	margin-top: 10px;
+}
+
+@media (max-width: 640px) {
+	.app-shell {
+		width: min(100% - 20px, 1100px);
+		padding-top: 20px;
+	}
+
+	.panel {
+		padding: 16px;
+	}
+}

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>SnippetPhone - Manual WebRTC Voice Demo</title>
+	<link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+	<main class="app-shell">
+		<header class="page-header">
+			<div>
+				<p class="eyebrow">Peer-to-peer voice demo</p>
+				<h1>SnippetPhone</h1>
+			</div>
+		</header>
+
+		<section class="panel">
+			<h2>1. Allow microphone access</h2>
+			<button id="startMicBtn" class="primary">Start microphone</button>
+			<p class="help-text">
+				This page does not use a signaling server. You will copy and paste the WebRTC
+				tokens between the two clients manually.
+			</p>
+		</section>
+
+		<section class="panel">
+			<h2>2. Manual token transfer</h2>
+			<div class="button-row">
+				<button id="createOfferBtn" class="primary">Generate offer</button>
+				<button id="copyOfferBtn" class="secondary">Copy offer</button>
+				<button id="connectBtn" class="primary">Connect / Generate answer</button>
+				<button id="copyAnswerBtn" class="secondary">Copy answer</button>
+			</div>
+			<div class="button-row">
+				<button id="completeCallBtn" class="primary">Complete call</button>
+			</div>
+
+			<div class="token-fields">
+				<label for="offerInput">Offer token</label>
+				<textarea id="offerInput" rows="8" placeholder="Paste the offer token from the caller here."></textarea>
+
+				<label for="answerInput">Answer token</label>
+				<textarea id="answerInput" rows="8"
+					placeholder="Paste the answer token from the receiver here."></textarea>
+			</div>
+		</section>
+
+		<section class="panel status-panel">
+			<h2>Connection status</h2>
+			<div id="statusLog" class="status-log" aria-live="polite">
+				Ready to start a call.
+			</div>
+		</section>
+
+		<section class="panel audio-panel">
+			<h2>Audio</h2>
+			<audio id="remoteAudio" autoplay playsinline></audio>
+		</section>
+	</main>
+
+	<script src="scripts/main.js"></script>
+</body>
+
+</html>
