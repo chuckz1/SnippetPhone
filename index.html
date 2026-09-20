@@ -31,6 +31,13 @@
 			<div id="statusLog" class="status-log" aria-live="polite">
 				Ready to start a call.
 			</div>
+			<div class="vad-controls">
+				<label class="vad-mode-label" for="vadModeSelect">Audio mode</label>
+				<select id="vadModeSelect" class="vad-mode-select">
+					<option value="standard" selected>Standard</option>
+					<option value="streaming">Streaming</option>
+				</select>
+			</div>
 			<div class="vad-indicator-wrap">
 				<span class="vad-indicator-label">Voice activity</span>
 				<span id="vadIndicator" class="vad-indicator idle" aria-live="polite">

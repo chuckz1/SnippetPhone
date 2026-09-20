@@ -10,6 +10,7 @@ const state = {
 
 const statusLog = document.getElementById("statusLog");
 const vadIndicator = document.getElementById("vadIndicator");
+const vadModeSelect = document.getElementById("vadModeSelect");
 
 function setVADIndicator(active) {
 	if (!vadIndicator) {
@@ -30,6 +31,64 @@ function setVADIndicator(active) {
 
 function setStatus(message) {
 	statusLog.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
+}
+
+function createVADConfig(mode) {
+	const config = {
+		mode,
+		streamIntervalMs: 250,
+		onStatus: setStatus,
+		onSpeechStart: () => {
+			setVADIndicator(true);
+			setStatus(
+				mode === "streaming"
+					? "Speech detected. Capturing VAD snippet."
+					: "Speech detected. Capturing final VAD snippet.",
+			);
+		},
+		onSpeechEnd: async (audioChunk) => {
+			setVADIndicator(false);
+			if (!audioChunk) {
+				return;
+			}
+
+			const floatArray =
+				audioChunk instanceof Float32Array
+					? audioChunk
+					: new Float32Array(audioChunk);
+
+			const int16Array = new Int16Array(floatArray.length);
+			for (let index = 0; index < floatArray.length; index += 1) {
+				const clamped = Math.max(-1, Math.min(1, floatArray[index]));
+				int16Array[index] = Math.round(clamped * 32767);
+			}
+
+			const buffer = int16Array.buffer;
+			const sent = await state.webrtc.sendSnippet(buffer);
+			if (sent) {
+				setStatus("Speech snippet sent over the WebRTC data channel.");
+			}
+		},
+	};
+
+	if (mode === "streaming") {
+		config.onSpeechEnd = () => {
+			setVADIndicator(false);
+			setStatus("Voice activity ended. Streaming stopped.");
+		};
+		config.onStreamChunk = async (audioChunk) => {
+			if (!audioChunk || !audioChunk.buffer) {
+				return;
+			}
+
+			const sent = await state.webrtc.sendSnippet(audioChunk.buffer);
+			if (sent) {
+				setStatus("Speech snippet sent over the WebRTC data channel.");
+			}
+		};
+	}
+
+	return config;
 }
 
 function ensureManagers() {
@@ -74,29 +133,30 @@ function ensureManagers() {
 	}
 
 	if (!state.vad) {
-		state.vad = new VADManager({
-			mode: "streaming",
-			streamIntervalMs: 250,
-			onStatus: setStatus,
-			onSpeechStart: () => {
-				setVADIndicator(true);
-				setStatus("Speech detected. Capturing VAD snippet.");
-			},
-			onSpeechEnd: () => {
-				setVADIndicator(false);
-				setStatus("Voice activity ended. Streaming stopped.");
-			},
-			onStreamChunk: async (audioChunk) => {
-				if (!audioChunk || !audioChunk.buffer) {
-					return;
-				}
+		const mode = vadModeSelect ? vadModeSelect.value : "standard";
+		state.vad = new VADManager(createVADConfig(mode));
+	}
+}
 
-				const sent = await state.webrtc.sendSnippet(audioChunk.buffer);
-				if (sent) {
-					setStatus("Speech snippet sent over the WebRTC data channel.");
-				}
-			},
-		});
+async function updateVADMode(mode) {
+	if (!state.vad) {
+		return;
+	}
+
+	if (state.vad) {
+		state.vad.stop();
+		state.vad = null;
+	}
+
+	state.vad = new VADManager(createVADConfig(mode));
+	if (window.vad) {
+		try {
+			await state.vad.initVAD();
+			setStatus(`VAD is ready in ${mode} mode.`);
+		} catch (error) {
+			console.error(error);
+			setStatus("The VAD library could not initialize in the selected mode.");
+		}
 	}
 }
 
@@ -124,6 +184,12 @@ async function initializeVAD() {
 			"The VAD library could not initialize. Check the browser console for details.",
 		);
 	}
+}
+
+if (vadModeSelect) {
+	vadModeSelect.addEventListener("change", async (event) => {
+		await updateVADMode(event.target.value);
+	});
 }
 
 initializeVAD();
