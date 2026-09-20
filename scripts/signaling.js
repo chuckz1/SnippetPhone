@@ -44,7 +44,6 @@ export class SignalManager {
 	buildSignalUrl(action, params = {}) {
 		const query = new URLSearchParams({
 			action,
-			id: this.tempId,
 			...params,
 		});
 		return `${this.serverUrl}?${query.toString()}`;
@@ -84,7 +83,7 @@ export class SignalManager {
 	}
 
 	async verifyServer() {
-		const response = await fetch(`${this.serverUrl}?action=offer`);
+		const response = await fetch(this.buildSignalUrl("clear"));
 		if (!response.ok) {
 			throw new Error(`Server verification failed: ${response.status}`);
 		}
@@ -102,8 +101,8 @@ export class SignalManager {
 		}, 1000);
 	}
 
-	async fetchSignal(action) {
-		const url = this.buildSignalUrl(action);
+	async fetchSignal(action, params = {}) {
+		const url = this.buildSignalUrl(action, params);
 		const response = await fetch(url);
 		if (!response.ok) {
 			throw new Error(`Signal fetch failed for ${action}: ${response.status}`);
@@ -111,33 +110,45 @@ export class SignalManager {
 
 		const text = await response.text();
 		if (!text) {
-			return {};
+			return { state: 0, data: null };
 		}
 
 		try {
-			return JSON.parse(text);
+			const payload = JSON.parse(text);
+			return {
+				state: Number(payload.state ?? 0),
+				data: payload.data ?? null,
+			};
 		} catch (error) {
 			console.warn(`Non-JSON response for ${action}:`, text);
-			return {};
+			return { state: 0, data: null };
 		}
+	}
+
+	async getState() {
+		return this.fetchSignal("get");
+	}
+
+	async setState(data) {
+		return this.fetchSignal("set", { data });
 	}
 
 	async setOffer(sdp) {
 		this.hasSentOffer = true;
 		this.hasSentAnswer = false;
 		this.signalingComplete = false;
-		const url = this.buildSignalUrl("setOffer", { sdp });
-		console.log("[SignalManager] Sending offer to signaling server:", url);
-		await fetch(url);
+		const result = await this.setState(sdp);
+		console.log("[SignalManager] Sending offer to signaling server:", result);
+		return result;
 	}
 
 	async setAnswer(sdp) {
 		this.hasSentAnswer = true;
 		this.signalingComplete = true;
 		this.stopPolling();
-		const url = this.buildSignalUrl("setAnswer", { sdp });
-		console.log("[SignalManager] Sending answer to signaling server:", url);
-		await fetch(url);
+		const result = await this.setState(sdp);
+		console.log("[SignalManager] Sending answer to signaling server:", result);
+		return result;
 	}
 
 	/**
@@ -146,9 +157,9 @@ export class SignalManager {
 	 * This intentionally does not reset the local live connection state.
 	 */
 	async clearAll() {
-		const url = this.buildSignalUrl("clearAll");
-		console.log("[SignalManager] Clearing signaling state:", url);
-		await fetch(url);
+		const result = await this.fetchSignal("clear");
+		console.log("[SignalManager] Clearing signaling state:", result);
+		return result;
 	}
 
 	async addCandidate(type, candidate) {
@@ -166,35 +177,41 @@ export class SignalManager {
 	}
 
 	async getOffer() {
-		const payload = await this.fetchSignal("offer");
-		const raw = payload.offer;
-		if (!raw) {
+		const response = await this.getState();
+		const raw = response.data;
+		if (
+			!raw ||
+			raw === "accepted" ||
+			raw === "create offer" ||
+			raw === "wait" ||
+			raw === "no-op" ||
+			raw === "cleared"
+		) {
 			return null;
 		}
-		if (typeof raw === "string") {
-			try {
-				return JSON.parse(raw);
-			} catch (error) {
-				return { sdp: raw };
-			}
+		if (response.state >= 2) {
+			return { sdp: raw };
 		}
-		return raw;
+		return null;
 	}
 
 	async getAnswer() {
-		const payload = await this.fetchSignal("answer");
-		const raw = payload.answer;
-		if (!raw) {
+		const response = await this.getState();
+		const raw = response.data;
+		if (
+			!raw ||
+			raw === "accepted" ||
+			raw === "create offer" ||
+			raw === "wait" ||
+			raw === "no-op" ||
+			raw === "cleared"
+		) {
 			return null;
 		}
-		if (typeof raw === "string") {
-			try {
-				return JSON.parse(raw);
-			} catch (error) {
-				return { sdp: raw };
-			}
+		if (response.state >= 3) {
+			return { sdp: raw };
 		}
-		return raw;
+		return null;
 	}
 
 	async getCandidates(type) {
@@ -219,36 +236,29 @@ export class SignalManager {
 		}
 
 		try {
-			const answer = await this.getAnswer();
-			const answerSignature = JSON.stringify(answer || null);
-			if (answer && answerSignature !== this.lastAnswerSignature) {
-				this.lastAnswerSignature = answerSignature;
-				const answerMessage =
-					typeof answer === "string" ? { sdp: answer } : { sdp: answer.sdp };
-				this.onAnswer(answerMessage);
-				this.stopPolling();
+			const response = await this.getState();
+			const state = Number(response.state ?? 0);
+			const data = response.data;
+
+			if (state === 1 && data === "wait") {
 				return;
 			}
 
-			if (!this.hasSentOffer) {
-				const offer = await this.getOffer();
-				const offerSignature = JSON.stringify(offer || null);
-				if (offer && offerSignature !== this.lastOfferSignature) {
+			if (state === 2 && data && data !== "accepted" && !this.hasSentOffer) {
+				const offerSignature = JSON.stringify(data);
+				if (offerSignature !== this.lastOfferSignature) {
 					this.lastOfferSignature = offerSignature;
-					const offerMessage =
-						typeof offer === "string" ? { sdp: offer } : { sdp: offer.sdp };
-					this.onOffer(offerMessage);
+					this.onOffer({ sdp: data });
 				}
+				return;
 			}
 
-			for (const type of ["A", "B"]) {
-				const candidates = await this.getCandidates(type);
-				for (const candidate of candidates) {
-					const candidateSignature = JSON.stringify(candidate);
-					if (!this.seenCandidates.has(candidateSignature)) {
-						this.seenCandidates.add(candidateSignature);
-						this.onCandidate({ candidate });
-					}
+			if (state === 3 && data && data !== "accepted") {
+				const answerSignature = JSON.stringify(data);
+				if (answerSignature !== this.lastAnswerSignature) {
+					this.lastAnswerSignature = answerSignature;
+					this.onAnswer({ sdp: data });
+					this.stopPolling();
 				}
 			}
 		} catch (error) {

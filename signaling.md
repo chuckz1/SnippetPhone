@@ -2,122 +2,178 @@
 
 const url = "https://script.google.com/macros/s/AKfycbzrDW6pei-ZNnki1AdPZBVxg3WbckDUhAphOHN2NbNgpUSHlvCkAwg7c53YXDreVesQhg/exec";
 
-# Recommended approach
+# Three-endpoint signaling flow
 
-Use simple GET requests only. The server stores offer/answer/candidate state and the client polls it instead of using WebSocket or POST requests. This avoids CORS issues because all communication is just fetch() calls to the same endpoint.
+Use simple GET requests only. The server owns a single state machine variable called `clientstate` and a current payload value. There are only three public actions: `get`, `set`, and `clear`.
 
-# Server code
+This is intentionally simpler than separate offer/answer stores. The client will poll the server and interpret the returned state/data pair. We are keeping client updates for later; the server protocol is what matters here.
+
+## State machine
+
+- `0` = no clients active / default state
+- `1` = first client has discovered a peer and is creating an offer
+- `2` = offer was created and is waiting for the answer
+- `3` = answer was created and is now waiting for the connection to complete
+
+## Server behavior
+
+### State `0`
+
+- `set` does nothing
+- `clear` does nothing
+- `get` moves the server to state `1` and returns:
+
+```json
+{ "state": 1, "data": "create offer" }
+```
+
+This is the first call that discovers the handshake and tells the original caller to create an offer.
+
+### State `1`
+
+- `get` returns:
+
+```json
+{ "state": 1, "data": "wait" }
+```
+
+- The first client creates an offer and sends it through `set`.
+- `set` with the offer transitions the server to state `2` and returns:
+
+```json
+{ "state": 2, "data": "accepted" }
+```
+
+The sent offer payload is stored as the server data value and will be returned by later `get` requests until the answer is set.
+
+Any other `get` requests while state is `1` should keep returning `"wait"` until the offer is posted.
+
+### State `2`
+
+- `get` returns the current offer payload, with the state still set to `2`:
+
+```json
+{ "state": 2, "data": "<offer payload>" }
+```
+
+- The offering client waits for the second client to receive the offer, create an answer, and send it through `set`.
+- `set` with the answer transitions the server to state `3` and returns:
+
+```json
+{ "state": 3, "data": "accepted" }
+```
+
+The sent answer payload is stored as the server data value and will be returned by later `get` requests until the connection is cleared.
+
+### State `3`
+
+- The second client waits while the first client polls for the answer.
+- `get` returns:
+
+```json
+{ "state": 3, "data": "<answer payload>" }
+```
+
+- `set` does nothing in this state.
+
+- Once the connection is established, the first client calls `clear` to reset the signal server.
+- `clear` resets the server back to state `0` and clears the payload.
+- Any `get` requests after this will start the handshake process anew.
+
+## Apps Script server code
 
 ```javascript
 const props = PropertiesService.getScriptProperties();
+const STATE_KEY = "clientstate";
+const DATA_KEY = "data";
 
-function clearProps() {
-	props.deleteProperty("offer");
-	props.deleteProperty("offerOwnerId");
-	props.deleteProperty("answer");
-	props.deleteProperty("answerOwnerId");
-	props.deleteProperty("candidatesA");
-	props.deleteProperty("candidatesB");
+function getState() {
+	const value = Number(props.getProperty(STATE_KEY) || 0);
+	return Number.isFinite(value) ? value : 0;
+}
+
+function getPayload() {
+	return props.getProperty(DATA_KEY) || null;
+}
+
+function setState(state, payload) {
+	props.setProperty(STATE_KEY, String(state));
+	if (payload === null) {
+		props.deleteProperty(DATA_KEY);
+		return;
+	}
+	props.setProperty(DATA_KEY, String(payload));
+}
+
+function clearState() {
+	props.deleteProperty(STATE_KEY);
+	props.deleteProperty(DATA_KEY);
+	props.setProperty(STATE_KEY, "0");
 }
 
 function doGet(e) {
-	const action = e.parameter.action;
-	const userId = e.parameter.id || "";
+	const action = (e.parameter.action || "").toLowerCase();
 
 	switch (action) {
-		case "offer":
-			return maybeClearSelfOffer(userId, "offer", () =>
-				respondJSON({ offer: null, ownerId: null }),
-			);
-
-		case "answer":
-			return maybeClearSelfAnswer(userId, "answer", () =>
-				respondJSON({ answer: null, ownerId: null }),
-			);
-
-		case "candidatesA":
-			return respondJSON({
-				candidates: JSON.parse(props.getProperty("candidatesA") || "[]"),
-			});
-
-		case "candidatesB":
-			return respondJSON({
-				candidates: JSON.parse(props.getProperty("candidatesB") || "[]"),
-			});
-
-		case "setOffer":
-			props.setProperty("offerOwnerId", userId);
-			props.setProperty("offer", e.parameter.sdp);
-			return respond("OK: offer stored");
-
-		case "setAnswer":
-			props.setProperty("answerOwnerId", userId);
-			props.setProperty("answer", e.parameter.sdp);
-			return respond("OK: answer stored");
-
-		case "addCandidateA":
-			const a = JSON.parse(props.getProperty("candidatesA") || "[]");
-			a.push({
-				id: userId,
-				candidate: e.parameter.candidate,
-			});
-			props.setProperty("candidatesA", JSON.stringify(a));
-			return respond("OK: candidateA stored");
-
-		case "addCandidateB":
-			const b = JSON.parse(props.getProperty("candidatesB") || "[]");
-			b.push({
-				id: userId,
-				candidate: e.parameter.candidate,
-			});
-			props.setProperty("candidatesB", JSON.stringify(b));
-			return respond("OK: candidateB stored");
-
-		case "clearAll":
-			clearProps();
-			return respond("OK: signaling state cleared");
-
+		case "get":
+			return respondJSON(handleGet());
+		case "set":
+			return respondJSON(handleSet(e.parameter.data || ""));
+		case "clear":
+			return respondJSON(handleClear());
 		default:
-			return respond("ERROR: unknown action");
+			return respondJSON({ state: getState(), data: "unknown action" });
 	}
 }
 
-function maybeClearSelfOffer(userId, key, emptyResponse) {
-	const storedOffer = props.getProperty("offer");
-	const storedOwnerId = props.getProperty("offerOwnerId");
+function handleGet() {
+	const currentState = getState();
 
-	if (!storedOffer) {
-		return respondJSON({ offer: null, ownerId: null });
+	if (currentState === 0) {
+		setState(1, "create offer");
+		return { state: 1, data: "create offer" };
 	}
 
-	if (storedOwnerId && storedOwnerId === userId) {
-		props.deleteProperty("offer");
-		props.deleteProperty("offerOwnerId");
-		return emptyResponse();
+	if (currentState === 1) {
+		return { state: 1, data: "wait" };
 	}
 
-	return respondJSON({ offer: storedOffer, ownerId: storedOwnerId });
+	return { state: currentState, data: getPayload() };
 }
 
-function maybeClearSelfAnswer(userId, key, emptyResponse) {
-	const storedAnswer = props.getProperty("answer");
-	const storedOwnerId = props.getProperty("answerOwnerId");
+function handleSet(payload) {
+	const currentState = getState();
 
-	if (!storedAnswer) {
-		return respondJSON({ answer: null, ownerId: null });
+	if (currentState === 0) {
+		return { state: 0, data: "no-op" };
 	}
 
-	if (storedOwnerId && storedOwnerId === userId) {
-		props.deleteProperty("answer");
-		props.deleteProperty("answerOwnerId");
-		return emptyResponse();
+	if (currentState === 1) {
+		setState(2, payload);
+		return { state: 2, data: "accepted" };
 	}
 
-	return respondJSON({ answer: storedAnswer, ownerId: storedOwnerId });
+	if (currentState === 2) {
+		setState(3, payload);
+		return { state: 3, data: "accepted" };
+	}
+
+	if (currentState === 3) {
+		return { state: 3, data: "accepted" };
+	}
+
+	return { state: currentState, data: getPayload() };
 }
 
-function respond(text) {
-	return ContentService.createTextOutput(text);
+function handleClear() {
+	const currentState = getState();
+
+	if (currentState === 0) {
+		return { state: 0, data: "no-op" };
+	}
+
+	clearState();
+	return { state: 0, data: "cleared" };
 }
 
 function respondJSON(obj) {
@@ -125,45 +181,57 @@ function respondJSON(obj) {
 }
 ```
 
-## Temp ID flow
+## Request examples
 
-Each client should generate a large random identifier before signaling starts. A UUID is ideal, but any sufficiently large random string is fine:
+### Start the handshake
 
 ```javascript
-const tempId = crypto.randomUUID();
+const response = await fetch(`${url}?action=get`);
+const result = await response.json();
+// { state: 1, data: "create offer" }
 ```
 
-Every request includes that id in the query string:
+### Send the offer
 
 ```javascript
-await fetch(
-	`${url}?action=setOffer&id=${encodeURIComponent(tempId)}&sdp=${encodeURIComponent(sdp)}`,
+const response = await fetch(
+	`${url}?action=set&data=${encodeURIComponent(offerSdp)}`,
 );
-const res = await fetch(`${url}?action=offer&id=${encodeURIComponent(tempId)}`);
+const result = await response.json();
+// { state: 2, data: "accepted" }
 ```
 
-When the server receives a `get offer` or `get answer` request, it compares the requesting `id` against the stored `offerOwnerId` or `answerOwnerId`. If they match, it deletes the stored value and returns an empty response so the peer does not see its own offer/answer.
-
-This keeps each side from reacting to its own outbound SDP while still allowing the other side to fetch it normally.
-
-## Reset endpoint
-
-Use the clear-all endpoint only after the WebRTC connection is complete and you want to free the signaling slot for the next call. This should not be used during negotiation because it would wipe the active offer/answer state mid-handshake.
+### Get the offer or answer
 
 ```javascript
-await fetch(`${url}?action=clearAll&id=${encodeURIComponent(tempId)}`);
+const response = await fetch(`${url}?action=get`);
+const result = await response.json();
+// state 2 => offer is waiting
+// state 3 => answer is waiting
 ```
 
-Typical usage:
+### Send the answer
 
 ```javascript
-// after the data channel and peer connection are both established
-await fetch(`${url}?action=clearAll&id=${encodeURIComponent(tempId)}`);
+const response = await fetch(
+	`${url}?action=set&data=${encodeURIComponent(answerSdp)}`,
+);
+const result = await response.json();
+// { state: 3, data: "accepted" }
 ```
 
-This makes it easy to reset the server state between sessions without leaving old SDP or candidate data behind for a future connection.
+### Clear the server after the connection is established
 
-- no CORS preflight issues for a simple public endpoint
-- easier to debug because every action is visible in the URL
-- simpler server code
-- easier to reason about because polling is explicit and predictable
+```javascript
+const response = await fetch(`${url}?action=clear`);
+const result = await response.json();
+// { state: 0, data: "cleared" }
+```
+
+## Notes
+
+- The server uses one authoritative `clientstate` variable to drive the handshake.
+- The payload is the current SDP string that clients must read and write during the workflow.
+- This deliberately avoids per-client IDs and separate offer/answer ownership variables.
+- The `clear` endpoint is only used after the connection is live so the next handshake can start cleanly.
+- This is a two-peer state machine. It is intentionally simple and meant to be easy to reason about before the client code is updated to match it.
