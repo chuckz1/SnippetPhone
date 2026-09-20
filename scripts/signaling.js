@@ -1,5 +1,5 @@
 const DEFAULT_SIGNALING_URL =
-	"https://toward-independence-cyber-bathroom.trycloudflare.com";
+	"https://script.google.com/macros/s/AKfycbzrDW6pei-ZNnki1AdPZBVxg3WbckDUhAphOHN2NbNgpUSHlvCkAwg7c53YXDreVesQhg/exec";
 
 /**
  * Manages the GET-only signaling flow used by the Apps Script signaling endpoint.
