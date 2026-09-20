@@ -75,30 +75,23 @@ function ensureManagers() {
 
 	if (!state.vad) {
 		state.vad = new VADManager({
+			mode: "streaming",
+			streamIntervalMs: 250,
 			onStatus: setStatus,
 			onSpeechStart: () => {
 				setVADIndicator(true);
 				setStatus("Speech detected. Capturing VAD snippet.");
 			},
-			onSpeechEnd: async (audioChunk) => {
+			onSpeechEnd: () => {
 				setVADIndicator(false);
-				if (!audioChunk) {
+				setStatus("Voice activity ended. Streaming stopped.");
+			},
+			onStreamChunk: async (audioChunk) => {
+				if (!audioChunk || !audioChunk.buffer) {
 					return;
 				}
 
-				const floatArray =
-					audioChunk instanceof Float32Array
-						? audioChunk
-						: new Float32Array(audioChunk);
-
-				const int16Array = new Int16Array(floatArray.length);
-				for (let index = 0; index < floatArray.length; index += 1) {
-					const clamped = Math.max(-1, Math.min(1, floatArray[index]));
-					int16Array[index] = Math.round(clamped * 32767);
-				}
-
-				const buffer = int16Array.buffer;
-				const sent = await state.webrtc.sendSnippet(buffer);
+				const sent = await state.webrtc.sendSnippet(audioChunk.buffer);
 				if (sent) {
 					setStatus("Speech snippet sent over the WebRTC data channel.");
 				}
