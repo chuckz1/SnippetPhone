@@ -2,6 +2,10 @@
 
 const url = "https://script.google.com/macros/s/AKfycbzrDW6pei-ZNnki1AdPZBVxg3WbckDUhAphOHN2NbNgpUSHlvCkAwg7c53YXDreVesQhg/exec";
 
+# Recommended approach
+
+Use simple GET requests only. The server stores offer/answer/candidate state and the client polls it instead of using WebSocket or POST requests. This avoids CORS issues because all communication is just fetch() calls to the same endpoint.
+
 # Server code
 
 ```javascript
@@ -11,31 +15,6 @@ let store = {
 	candidatesA: [],
 	candidatesB: [],
 };
-
-function doPost(e) {
-	const data = JSON.parse(e.postData.contents);
-
-	switch (data.type) {
-		case "offer":
-			store.offer = data.sdp;
-			return respond("OK: offer stored");
-
-		case "answer":
-			store.answer = data.sdp;
-			return respond("OK: answer stored");
-
-		case "candidateA":
-			store.candidatesA.push(data.candidate);
-			return respond("OK: candidateA stored");
-
-		case "candidateB":
-			store.candidatesB.push(data.candidate);
-			return respond("OK: candidateB stored");
-
-		default:
-			return respond("ERROR: unknown type");
-	}
-}
 
 function doGet(e) {
 	const action = e.parameter.action;
@@ -53,6 +32,22 @@ function doGet(e) {
 		case "candidatesB":
 			return respondJSON({ candidates: store.candidatesB });
 
+		case "setOffer":
+			store.offer = e.parameter.sdp;
+			return respond("OK: offer stored");
+
+		case "setAnswer":
+			store.answer = e.parameter.sdp;
+			return respond("OK: answer stored");
+
+		case "addCandidateA":
+			store.candidatesA.push(e.parameter.candidate);
+			return respond("OK: candidateA stored");
+
+		case "addCandidateB":
+			store.candidatesB.push(e.parameter.candidate);
+			return respond("OK: candidateB stored");
+
 		default:
 			return respond("ERROR: unknown action");
 	}
@@ -67,45 +62,61 @@ function respondJSON(obj) {
 }
 ```
 
-# Client code example:
+# Client code example
 
 ```javascript
+const url =
+	"https://script.google.com/macros/s/AKfycbzrDW6pei-ZNnki1AdPZBVxg3WbckDUhAphOHN2NbNgpUSHlvCkAwg7c53YXDreVesQhg/exec";
+
+async function setOffer(sdp) {
+	await fetch(`${url}?action=setOffer&sdp=${encodeURIComponent(sdp)}`);
+}
+
+async function setAnswer(sdp) {
+	await fetch(`${url}?action=setAnswer&sdp=${encodeURIComponent(sdp)}`);
+}
+
+async function addCandidate(type, candidate) {
+	await fetch(
+		`${url}?action=add${type}&candidate=${encodeURIComponent(candidate)}`,
+	);
+}
+
+async function getOffer() {
+	const res = await fetch(`${url}?action=offer`);
+	return (await res.json()).offer;
+}
+
+async function getAnswer() {
+	const res = await fetch(`${url}?action=answer`);
+	return (await res.json()).answer;
+}
+
+async function getCandidates(type) {
+	const res = await fetch(`${url}?action=candidates${type}`);
+	return (await res.json()).candidates || [];
+}
+
 async function startSymmetric() {
-	// 1. Check if an offer exists
-	let res = await fetch(url + "?action=offer");
-	let json = await res.json();
-	let offer = json.offer;
+	let offer = await getOffer();
 
 	if (!offer) {
-		// I am the first device → create offer
 		console.log("No offer found. I will create one.");
 
 		const offerDesc = await pc.createOffer();
 		await pc.setLocalDescription(offerDesc);
+		await setOffer(JSON.stringify(offerDesc));
 
-		await fetch(url, {
-			method: "POST",
-			body: JSON.stringify({ type: "offer", sdp: offerDesc }),
-		});
-
-		// Now wait for answer
 		await waitForAnswer();
 	} else {
-		// Offer exists → I am the second device → create answer
 		console.log("Offer found. I will create an answer.");
-
 		await pc.setRemoteDescription(offer);
 
 		const answerDesc = await pc.createAnswer();
 		await pc.setLocalDescription(answerDesc);
-
-		await fetch(url, {
-			method: "POST",
-			body: JSON.stringify({ type: "answer", sdp: answerDesc }),
-		});
+		await setAnswer(JSON.stringify(answerDesc));
 	}
 
-	// Start ICE candidate polling
 	pollCandidates();
 }
 
@@ -114,37 +125,35 @@ async function waitForAnswer() {
 
 	while (!answer) {
 		await sleep(1000);
-
-		let res = await fetch(url + "?action=answer");
-		let json = await res.json();
-		answer = json.answer;
+		answer = await getAnswer();
 	}
 
 	console.log("Answer received.");
 	await pc.setRemoteDescription(answer);
 }
 
-pc.onicecandidate = (e) => {
+pc.onicecandidate = async (e) => {
 	if (e.candidate) {
-		const type =
-			pc.localDescription.type === "offer" ? "candidateA" : "candidateB";
-
-		fetch(url, {
-			method: "POST",
-			body: JSON.stringify({ type, candidate: e.candidate }),
-		});
+		const type = pc.localDescription.type === "offer" ? "A" : "B";
+		await addCandidate(type, JSON.stringify(e.candidate));
 	}
 };
 
 function pollCandidates() {
 	setInterval(async () => {
-		const type =
-			pc.localDescription.type === "offer" ? "candidatesB" : "candidatesA";
+		const type = pc.localDescription.type === "offer" ? "B" : "A";
+		const candidates = await getCandidates(type);
 
-		let res = await fetch(url + "?action=" + type);
-		let json = await res.json();
-
-		json.candidates.forEach((c) => pc.addIceCandidate(c));
+		for (const raw of candidates) {
+			await pc.addIceCandidate(JSON.parse(raw));
+		}
 	}, 1000);
 }
 ```
+
+# Why use GET-only signaling?
+
+- no CORS preflight issues for a simple public endpoint
+- easier to debug because every action is visible in the URL
+- simpler server code
+- easier to reason about because polling is explicit and predictable

@@ -12,17 +12,12 @@ const config = {
 };
 
 export class WebRTCManager {
-	constructor({ onStatus, onRemoteSnippet } = {}) {
+	constructor({ onStatus, onRemoteSnippet, signalingManager } = {}) {
 		this.onStatus = onStatus || (() => {});
 		this.onRemoteSnippet = onRemoteSnippet || (() => {});
+		this.signalingManager = signalingManager || null;
 		this.peer = null;
 		this.dataChannel = null;
-		this.signalingSocket = null;
-		this.signalingServerUrl =
-			"https://script.google.com/macros/s/AKfycbzrDW6pei-ZNnki1AdPZBVxg3WbckDUhAphOHN2NbNgpUSHlvCkAwg7c53YXDreVesQhg/exec";
-		this.signalingPollTimer = null;
-		this.lastOfferSignature = "";
-		this.lastAnswerSignature = "";
 		this.generatedOfferToken = "";
 		this.generatedAnswerToken = "";
 		this.audioContext = null;
@@ -51,155 +46,6 @@ export class WebRTCManager {
 		this.logDebug(`Connection stage: ${stage}`, message || "");
 		if (message) {
 			this.setStatus(message);
-		}
-	}
-
-	/**
-	 * Connect to the signaling server and start polling for stored offer/answer/candidate data.
-	 *
-	 * @param {string} url - The server URL that stores signaling state.
-	 * @returns {number|null} The polling timer handle, if started.
-	 */
-	connectSignalingServer(url = this.signalingServerUrl) {
-		this.signalingServerUrl = url;
-		this.updateConnectionStage(
-			"connecting-signaling",
-			`Connecting to signaling server: ${url}`,
-		);
-		this.logDebug("Attempting signaling connection", url);
-
-		if (this.signalingPollTimer) {
-			return this.signalingPollTimer;
-		}
-
-		this.startSignalingPolling();
-		this.verifySignalingServer()
-			.then(() => {
-				this.updateConnectionStage(
-					"signaling-connected",
-					"Signaling server found and connected.",
-				);
-			})
-			.catch((error) => {
-				console.warn("Signaling server verification failed:", error);
-				this.updateConnectionStage(
-					"signaling-error",
-					"Unable to reach the signaling server. Check the URL and server status.",
-				);
-			});
-		return this.signalingPollTimer;
-	}
-
-	async verifySignalingServer() {
-		const result = await this.fetchSignal("offer");
-		this.logDebug("Signaling server responded", result);
-		return result;
-	}
-
-	startSignalingPolling() {
-		if (this.signalingPollTimer) {
-			return;
-		}
-
-		this.pollSignalingState();
-		this.signalingPollTimer = setInterval(() => {
-			this.pollSignalingState();
-		}, 1000);
-	}
-
-	async fetchSignal(action) {
-		const url = `${this.signalingServerUrl}?action=${encodeURIComponent(action)}`;
-		const response = await fetch(url);
-		if (!response.ok) {
-			throw new Error(`Signal fetch failed for ${action}: ${response.status}`);
-		}
-
-		const text = await response.text();
-		if (!text) {
-			return {};
-		}
-
-		try {
-			return JSON.parse(text);
-		} catch (error) {
-			console.warn(`Non-JSON response for ${action}:`, text);
-			return {};
-		}
-	}
-
-	async sendSignalingMessage(message) {
-		this.logDebug("Sending signaling message", message);
-		const response = await fetch(this.signalingServerUrl, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify(message),
-		});
-
-		if (!response.ok) {
-			throw new Error(`Signal POST failed: ${response.status}`);
-		}
-
-		const text = await response.text();
-		this.logDebug("Signal stored successfully", text);
-		return text;
-	}
-
-	async pollSignalingState() {
-		try {
-			const offerData = await this.fetchSignal("offer");
-			const offerSignature = JSON.stringify(offerData.offer || null);
-			if (offerData.offer && offerSignature !== this.lastOfferSignature) {
-				this.lastOfferSignature = offerSignature;
-				if (!this.peer || !this.peer.remoteDescription) {
-					this.updateConnectionStage(
-						"offer-received",
-						"Remote offer received.",
-					);
-					await this.handleIncomingOffer({ sdp: offerData.offer });
-				}
-			}
-
-			const answerData = await this.fetchSignal("answer");
-			const answerSignature = JSON.stringify(answerData.answer || null);
-			if (answerData.answer && answerSignature !== this.lastAnswerSignature) {
-				this.lastAnswerSignature = answerSignature;
-				if (this.peer) {
-					this.updateConnectionStage(
-						"answer-received",
-						"Remote answer received.",
-					);
-					await this.handleIncomingAnswer({ sdp: answerData.answer });
-				}
-			}
-
-			const localDescriptionType =
-				this.peer && this.peer.localDescription
-					? this.peer.localDescription.type
-					: null;
-
-			if (localDescriptionType === "offer") {
-				const remoteCandidates = await this.fetchSignal("candidatesB");
-				const candidates = remoteCandidates.candidates || [];
-				for (const candidate of candidates) {
-					await this.handleIncomingCandidate({ candidate });
-				}
-			}
-
-			if (localDescriptionType === "answer") {
-				const remoteCandidates = await this.fetchSignal("candidatesA");
-				const candidates = remoteCandidates.candidates || [];
-				for (const candidate of candidates) {
-					await this.handleIncomingCandidate({ candidate });
-				}
-			}
-		} catch (error) {
-			console.warn("Failed to poll signaling state:", error);
-			this.updateConnectionStage(
-				"signaling-error",
-				"Unable to reach the signaling server. Check the URL and server status.",
-			);
 		}
 	}
 
@@ -241,12 +87,13 @@ export class WebRTCManager {
 			2,
 		);
 
-		this.sendSignalingMessage({
-			type: "answer",
-			sdp: peer.localDescription.sdp,
-		}).catch((error) => {
-			console.warn("Failed to store answer on signaling server:", error);
-		});
+		if (this.signalingManager) {
+			this.signalingManager
+				.setAnswer(JSON.stringify(peer.localDescription))
+				.catch((error) => {
+					console.warn("Failed to store answer on signaling server:", error);
+				});
+		}
 		this.setStatus("Offer received. Answer sent over signaling.");
 	}
 
@@ -376,17 +223,16 @@ export class WebRTCManager {
 
 			const remoteCandidateType =
 				peer.localDescription && peer.localDescription.type === "offer"
-					? "candidateA"
-					: "candidateB";
+					? "A"
+					: "B";
 
-			if (this.signalingServerUrl) {
+			if (this.signalingManager) {
 				this.logDebug("Local ICE candidate generated", candidate);
-				this.sendSignalingMessage({
-					type: remoteCandidateType,
-					candidate,
-				}).catch((error) => {
-					console.warn("Failed to store ICE candidate:", error);
-				});
+				this.signalingManager
+					.addCandidate(remoteCandidateType, JSON.stringify(candidate))
+					.catch((error) => {
+						console.warn("Failed to store ICE candidate:", error);
+					});
 			}
 		};
 
@@ -530,12 +376,13 @@ export class WebRTCManager {
 		};
 
 		this.generatedOfferToken = JSON.stringify(token, null, 2);
-		this.sendSignalingMessage({
-			type: "offer",
-			sdp: peer.localDescription.sdp,
-		}).catch((error) => {
-			console.warn("Failed to store offer on signaling server:", error);
-		});
+		if (this.signalingManager) {
+			this.signalingManager
+				.setOffer(JSON.stringify(peer.localDescription))
+				.catch((error) => {
+					console.warn("Failed to store offer on signaling server:", error);
+				});
+		}
 		return this.generatedOfferToken;
 	}
 

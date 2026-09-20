@@ -1,9 +1,11 @@
 import { WebRTCManager } from "./webrtc.js";
+import { SignalManager } from "./signaling.js";
 import { VADManager } from "./vad.js";
 
 const state = {
 	webrtc: null,
 	vad: null,
+	signaling: null,
 };
 
 const startMicBtn = document.getElementById("startMicBtn");
@@ -22,15 +24,37 @@ function setStatus(message) {
 }
 
 function ensureManagers() {
+	if (!state.signaling) {
+		state.signaling = new SignalManager({
+			onStatus: setStatus,
+			onOffer: (message) => {
+				if (state.webrtc) {
+					state.webrtc.handleIncomingOffer(message);
+				}
+			},
+			onAnswer: (message) => {
+				if (state.webrtc) {
+					state.webrtc.handleIncomingAnswer(message);
+				}
+			},
+			onCandidate: (message) => {
+				if (state.webrtc) {
+					state.webrtc.handleIncomingCandidate(message);
+				}
+			},
+		});
+	}
+
 	if (!state.webrtc) {
 		state.webrtc = new WebRTCManager({
 			onStatus: setStatus,
+			signalingManager: state.signaling,
 			onRemoteSnippet: () => {
 				// Remote snippets are played through the WebRTC data channel callback and
 				// do not require a separate audio element in the DOM.
 			},
 		});
-		state.webrtc.connectSignalingServer();
+		state.signaling.connect();
 	}
 
 	if (!state.vad) {
