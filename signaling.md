@@ -9,43 +9,46 @@ Use simple GET requests only. The server stores offer/answer/candidate state and
 # Server code
 
 ```javascript
-let store = {
-	offer: null,
-	answer: null,
-	candidatesA: [],
-	candidatesB: [],
-};
+const props = PropertiesService.getScriptProperties();
 
 function doGet(e) {
 	const action = e.parameter.action;
 
 	switch (action) {
 		case "offer":
-			return respondJSON({ offer: store.offer });
+			return respondJSON({ offer: props.getProperty("offer") });
 
 		case "answer":
-			return respondJSON({ answer: store.answer });
+			return respondJSON({ answer: props.getProperty("answer") });
 
 		case "candidatesA":
-			return respondJSON({ candidates: store.candidatesA });
+			return respondJSON({
+				candidates: JSON.parse(props.getProperty("candidatesA") || "[]"),
+			});
 
 		case "candidatesB":
-			return respondJSON({ candidates: store.candidatesB });
+			return respondJSON({
+				candidates: JSON.parse(props.getProperty("candidatesB") || "[]"),
+			});
 
 		case "setOffer":
-			store.offer = e.parameter.sdp;
+			props.setProperty("offer", e.parameter.sdp);
 			return respond("OK: offer stored");
 
 		case "setAnswer":
-			store.answer = e.parameter.sdp;
+			props.setProperty("answer", e.parameter.sdp);
 			return respond("OK: answer stored");
 
 		case "addCandidateA":
-			store.candidatesA.push(e.parameter.candidate);
+			const a = JSON.parse(props.getProperty("candidatesA") || "[]");
+			a.push(e.parameter.candidate);
+			props.setProperty("candidatesA", JSON.stringify(a));
 			return respond("OK: candidateA stored");
 
 		case "addCandidateB":
-			store.candidatesB.push(e.parameter.candidate);
+			const b = JSON.parse(props.getProperty("candidatesB") || "[]");
+			b.push(e.parameter.candidate);
+			props.setProperty("candidatesB", JSON.stringify(b));
 			return respond("OK: candidateB stored");
 
 		default:

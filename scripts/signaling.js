@@ -25,6 +25,18 @@ export class SignalManager {
 		this.lastOfferSignature = "";
 		this.lastAnswerSignature = "";
 		this.seenCandidates = new Set();
+		this.hasSentOffer = false;
+		this.hasSentAnswer = false;
+		this.signalingComplete = false;
+	}
+
+	stopPolling() {
+		this.signalingComplete = true;
+		this.setStatus("Stopping signaling polling.");
+		if (this.pollTimer) {
+			clearInterval(this.pollTimer);
+			this.pollTimer = null;
+		}
 	}
 
 	setStatus(message) {
@@ -94,12 +106,18 @@ export class SignalManager {
 	}
 
 	async setOffer(sdp) {
+		this.hasSentOffer = true;
+		this.hasSentAnswer = false;
+		this.signalingComplete = false;
 		const url = `${this.serverUrl}?action=setOffer&sdp=${encodeURIComponent(sdp)}`;
 		console.log("[SignalManager] Sending offer to signaling server:", url);
 		await fetch(url);
 	}
 
 	async setAnswer(sdp) {
+		this.hasSentAnswer = true;
+		this.signalingComplete = true;
+		this.stopPolling();
 		const url = `${this.serverUrl}?action=setAnswer&sdp=${encodeURIComponent(sdp)}`;
 		console.log("[SignalManager] Sending answer to signaling server:", url);
 		await fetch(url);
@@ -165,16 +183,12 @@ export class SignalManager {
 	}
 
 	async pollSignalingState() {
-		try {
-			const offer = await this.getOffer();
-			const offerSignature = JSON.stringify(offer || null);
-			if (offer && offerSignature !== this.lastOfferSignature) {
-				this.lastOfferSignature = offerSignature;
-				const offerMessage =
-					typeof offer === "string" ? { sdp: offer } : { sdp: offer.sdp };
-				this.onOffer(offerMessage);
-			}
+		if (this.signalingComplete) {
+			this.stopPolling();
+			return;
+		}
 
+		try {
 			const answer = await this.getAnswer();
 			const answerSignature = JSON.stringify(answer || null);
 			if (answer && answerSignature !== this.lastAnswerSignature) {
@@ -182,6 +196,19 @@ export class SignalManager {
 				const answerMessage =
 					typeof answer === "string" ? { sdp: answer } : { sdp: answer.sdp };
 				this.onAnswer(answerMessage);
+				this.stopPolling();
+				return;
+			}
+
+			if (!this.hasSentOffer) {
+				const offer = await this.getOffer();
+				const offerSignature = JSON.stringify(offer || null);
+				if (offer && offerSignature !== this.lastOfferSignature) {
+					this.lastOfferSignature = offerSignature;
+					const offerMessage =
+						typeof offer === "string" ? { sdp: offer } : { sdp: offer.sdp };
+					this.onOffer(offerMessage);
+				}
 			}
 
 			for (const type of ["A", "B"]) {
