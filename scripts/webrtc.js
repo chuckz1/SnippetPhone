@@ -55,7 +55,7 @@ export class WebRTCManager {
 	 * @param {string} url - The signaling server URL.
 	 * @returns {WebSocket} The active signaling socket.
 	 */
-	connectSignalingServer(url = "ws://34.55.201.219:8080") {
+	connectSignalingServer(url = "wss://toward-independence-cyber-bathroom.trycloudflare.com") {
 		if (typeof WebSocket === "undefined") {
 			this.updateConnectionStage(
 				"browser-missing-websocket",
