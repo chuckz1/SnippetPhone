@@ -30,6 +30,7 @@ function ensureManagers() {
 				// do not require a separate audio element in the DOM.
 			},
 		});
+		state.webrtc.connectSignalingServer();
 	}
 
 	if (!state.vad) {

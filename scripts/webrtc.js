@@ -17,6 +17,7 @@ export class WebRTCManager {
 		this.onRemoteSnippet = onRemoteSnippet || (() => {});
 		this.peer = null;
 		this.dataChannel = null;
+		this.signalingSocket = null;
 		this.generatedOfferToken = "";
 		this.generatedAnswerToken = "";
 		this.audioContext = null;
@@ -26,6 +27,161 @@ export class WebRTCManager {
 
 	setStatus(message) {
 		this.onStatus(message);
+	}
+
+	/**
+	 * Connect to the WebSocket signaling server and listen for offer/answer/candidate messages.
+	 *
+	 * @param {string} url - The signaling server URL.
+	 * @returns {WebSocket} The active signaling socket.
+	 */
+	connectSignalingServer(url = "ws://34.55.201.219:8080") {
+		if (
+			this.signalingSocket &&
+			(this.signalingSocket.readyState === WebSocket.OPEN ||
+				this.signalingSocket.readyState === WebSocket.CONNECTING)
+		) {
+			return this.signalingSocket;
+		}
+
+		const ws = new WebSocket(url);
+		this.signalingSocket = ws;
+
+		ws.onopen = () => {
+			this.setStatus("Connected to signaling server.");
+		};
+
+		ws.onclose = () => {
+			this.setStatus("Signaling server disconnected.");
+		};
+
+		ws.onmessage = async (event) => {
+			try {
+				const msg = JSON.parse(event.data);
+				if (!msg || !msg.type) {
+					return;
+				}
+
+				if (msg.type === "welcome") {
+					return;
+				}
+
+				if (msg.type === "offer") {
+					await this.handleIncomingOffer(msg);
+					return;
+				}
+
+				if (msg.type === "answer") {
+					await this.handleIncomingAnswer(msg);
+					return;
+				}
+
+				if (msg.type === "candidate") {
+					await this.handleIncomingCandidate(msg);
+				}
+			} catch (error) {
+				console.error("Failed to parse signaling message:", error);
+			}
+		};
+
+		return ws;
+	}
+
+	/**
+	 * Send a JSON signaling payload to the connected server.
+	 *
+	 * @param {object} message - The signaling message to send.
+	 * @returns {boolean} Whether the message was queued successfully.
+	 */
+	sendSignalingMessage(message) {
+		const ws = this.signalingSocket;
+		if (!ws || ws.readyState !== WebSocket.OPEN) {
+			return false;
+		}
+
+		ws.send(JSON.stringify(message));
+		return true;
+	}
+
+	/**
+	 * Handle a remote offer arriving over signaling.
+	 *
+	 * @param {object} message - The incoming signaling payload.
+	 */
+	async handleIncomingOffer(message) {
+		if (!message || !message.sdp) {
+			return;
+		}
+
+		const peer = this.createPeerConnection();
+		this.answerIceCandidates = [];
+		await peer.setRemoteDescription(
+			new RTCSessionDescription({ type: "offer", sdp: message.sdp }),
+		);
+		await this.applyCandidates(message.candidates || []);
+
+		const answer = await peer.createAnswer();
+		await peer.setLocalDescription(answer);
+		await this.waitForIceGathering();
+
+		const answerMessage = {
+			type: "answer",
+			sdp: peer.localDescription.sdp,
+			candidates: this.answerIceCandidates.slice(),
+		};
+
+		this.generatedAnswerToken = JSON.stringify(
+			{
+				version: 1,
+				type: "answer",
+				sdp: peer.localDescription.sdp,
+				candidates: this.answerIceCandidates.slice(),
+			},
+			null,
+			2,
+		);
+
+		this.sendSignalingMessage(answerMessage);
+		this.setStatus("Offer received. Answer sent over signaling.");
+	}
+
+	/**
+	 * Handle a remote answer arriving over signaling.
+	 *
+	 * @param {object} message - The incoming signaling payload.
+	 */
+	async handleIncomingAnswer(message) {
+		if (!message || !message.sdp) {
+			return;
+		}
+
+		if (!this.peer) {
+			this.setStatus("No active offer exists yet. Generate an offer first.");
+			return;
+		}
+
+		await this.peer.setRemoteDescription(
+			new RTCSessionDescription({ type: "answer", sdp: message.sdp }),
+		);
+		await this.applyCandidates(message.candidates || []);
+		this.setStatus("Answer received. Call is connected.");
+	}
+
+	/**
+	 * Handle a remote ICE candidate arriving over signaling.
+	 *
+	 * @param {object} message - The incoming candidate payload.
+	 */
+	async handleIncomingCandidate(message) {
+		if (!this.peer || !message || !message.candidate) {
+			return;
+		}
+
+		try {
+			await this.peer.addIceCandidate(new RTCIceCandidate(message.candidate));
+		} catch (error) {
+			console.warn("Failed to add remote ICE candidate:", error);
+		}
 	}
 
 	createPeerConnection() {
@@ -70,6 +226,16 @@ export class WebRTCManager {
 				peer.localDescription.type === "answer"
 			) {
 				this.answerIceCandidates.push(candidate);
+			}
+
+			if (
+				this.signalingSocket &&
+				this.signalingSocket.readyState === WebSocket.OPEN
+			) {
+				this.sendSignalingMessage({
+					type: "candidate",
+					candidate,
+				});
 			}
 		};
 
@@ -213,6 +379,11 @@ export class WebRTCManager {
 		};
 
 		this.generatedOfferToken = JSON.stringify(token, null, 2);
+		this.sendSignalingMessage({
+			type: "offer",
+			sdp: peer.localDescription.sdp,
+			candidates: this.offerIceCandidates.slice(),
+		});
 		return this.generatedOfferToken;
 	}
 
