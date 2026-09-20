@@ -54,7 +54,11 @@ function ensureManagers() {
 				// do not require a separate audio element in the DOM.
 			},
 		});
-		state.signaling.connect();
+		state.signaling.connect().then((connected) => {
+			if (connected) {
+				state.webrtc.autoNegotiate();
+			}
+		});
 	}
 
 	if (!state.vad) {

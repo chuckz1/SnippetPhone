@@ -386,6 +386,52 @@ export class WebRTCManager {
 		return this.generatedOfferToken;
 	}
 
+	async autoNegotiate() {
+		if (!this.signalingManager) {
+			this.setStatus("Signaling is not available yet.");
+			return null;
+		}
+
+		try {
+			const existingOffer = await this.signalingManager.getOffer();
+			if (existingOffer) {
+				this.setStatus(
+					"Offer found on the signaling server. Answering automatically.",
+				);
+				await this.handleIncomingOffer({
+					sdp: existingOffer.sdp || existingOffer,
+					candidates: existingOffer.candidates || [],
+				});
+				return "answer";
+			}
+
+			const existingAnswer = await this.signalingManager.getAnswer();
+			if (existingAnswer) {
+				this.setStatus(
+					"Answer found on the signaling server. Completing automatically.",
+				);
+				if (!this.peer) {
+					this.createPeerConnection();
+				}
+				await this.handleIncomingAnswer({
+					sdp: existingAnswer.sdp || existingAnswer,
+					candidates: existingAnswer.candidates || [],
+				});
+				return "connected";
+			}
+
+			this.setStatus("No offer found. Creating an offer automatically.");
+			await this.generateOfferToken();
+			return "offer";
+		} catch (error) {
+			console.error("Automatic negotiation failed:", error);
+			this.setStatus(
+				"Automatic signaling setup failed. Check the server and browser console.",
+			);
+			return null;
+		}
+	}
+
 	async processIncomingToken(rawText) {
 		const tokenText = (rawText || "").trim();
 		if (!tokenText) {
