@@ -21,6 +21,7 @@ export class SignalManager {
 		this.onOffer = onOffer;
 		this.onAnswer = onAnswer;
 		this.onCandidate = onCandidate;
+		this.tempId = this.createTempId();
 		this.pollTimer = null;
 		this.lastOfferSignature = "";
 		this.lastAnswerSignature = "";
@@ -28,6 +29,25 @@ export class SignalManager {
 		this.hasSentOffer = false;
 		this.hasSentAnswer = false;
 		this.signalingComplete = false;
+	}
+
+	createTempId() {
+		if (
+			globalThis.crypto &&
+			typeof globalThis.crypto.randomUUID === "function"
+		) {
+			return globalThis.crypto.randomUUID();
+		}
+		return `temp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+	}
+
+	buildSignalUrl(action, params = {}) {
+		const query = new URLSearchParams({
+			action,
+			id: this.tempId,
+			...params,
+		});
+		return `${this.serverUrl}?${query.toString()}`;
 	}
 
 	stopPolling() {
@@ -86,7 +106,7 @@ export class SignalManager {
 	}
 
 	async fetchSignal(action) {
-		const url = `${this.serverUrl}?action=${encodeURIComponent(action)}`;
+		const url = this.buildSignalUrl(action);
 		const response = await fetch(url);
 		if (!response.ok) {
 			throw new Error(`Signal fetch failed for ${action}: ${response.status}`);
@@ -109,7 +129,7 @@ export class SignalManager {
 		this.hasSentOffer = true;
 		this.hasSentAnswer = false;
 		this.signalingComplete = false;
-		const url = `${this.serverUrl}?action=setOffer&sdp=${encodeURIComponent(sdp)}`;
+		const url = this.buildSignalUrl("setOffer", { sdp });
 		console.log("[SignalManager] Sending offer to signaling server:", url);
 		await fetch(url);
 	}
@@ -118,8 +138,19 @@ export class SignalManager {
 		this.hasSentAnswer = true;
 		this.signalingComplete = true;
 		this.stopPolling();
-		const url = `${this.serverUrl}?action=setAnswer&sdp=${encodeURIComponent(sdp)}`;
+		const url = this.buildSignalUrl("setAnswer", { sdp });
 		console.log("[SignalManager] Sending answer to signaling server:", url);
+		await fetch(url);
+	}
+
+	/**
+	 * Clears the stored signaling handshake on the server after a successful
+	 * connection so the same server slot can be reused for a future call.
+	 * This intentionally does not reset the local live connection state.
+	 */
+	async clearAll() {
+		const url = this.buildSignalUrl("clearAll");
+		console.log("[SignalManager] Clearing signaling state:", url);
 		await fetch(url);
 	}
 
@@ -127,7 +158,9 @@ export class SignalManager {
 		const candidateType = type.startsWith("Candidate")
 			? type
 			: `Candidate${type}`;
-		const url = `${this.serverUrl}?action=add${candidateType}&candidate=${encodeURIComponent(candidate)}`;
+		const url = this.buildSignalUrl(`add${candidateType}`, {
+			candidate,
+		});
 		console.log(
 			"[SignalManager] Sending ICE candidate to signaling server:",
 			url,

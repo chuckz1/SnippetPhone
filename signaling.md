@@ -13,13 +13,18 @@ const props = PropertiesService.getScriptProperties();
 
 function doGet(e) {
 	const action = e.parameter.action;
+	const userId = e.parameter.id || "";
 
 	switch (action) {
 		case "offer":
-			return respondJSON({ offer: props.getProperty("offer") });
+			return maybeClearSelfOffer(userId, "offer", () =>
+				respondJSON({ offer: null, ownerId: null }),
+			);
 
 		case "answer":
-			return respondJSON({ answer: props.getProperty("answer") });
+			return maybeClearSelfAnswer(userId, "answer", () =>
+				respondJSON({ answer: null, ownerId: null }),
+			);
 
 		case "candidatesA":
 			return respondJSON({
@@ -32,28 +37,79 @@ function doGet(e) {
 			});
 
 		case "setOffer":
+			props.setProperty("offerOwnerId", userId);
 			props.setProperty("offer", e.parameter.sdp);
 			return respond("OK: offer stored");
 
 		case "setAnswer":
+			props.setProperty("answerOwnerId", userId);
 			props.setProperty("answer", e.parameter.sdp);
 			return respond("OK: answer stored");
 
 		case "addCandidateA":
 			const a = JSON.parse(props.getProperty("candidatesA") || "[]");
-			a.push(e.parameter.candidate);
+			a.push({
+				id: userId,
+				candidate: e.parameter.candidate,
+			});
 			props.setProperty("candidatesA", JSON.stringify(a));
 			return respond("OK: candidateA stored");
 
 		case "addCandidateB":
 			const b = JSON.parse(props.getProperty("candidatesB") || "[]");
-			b.push(e.parameter.candidate);
+			b.push({
+				id: userId,
+				candidate: e.parameter.candidate,
+			});
 			props.setProperty("candidatesB", JSON.stringify(b));
 			return respond("OK: candidateB stored");
+
+		case "clearAll":
+			props.deleteProperty("offer");
+			props.deleteProperty("offerOwnerId");
+			props.deleteProperty("answer");
+			props.deleteProperty("answerOwnerId");
+			props.deleteProperty("candidatesA");
+			props.deleteProperty("candidatesB");
+			return respond("OK: signaling state cleared");
 
 		default:
 			return respond("ERROR: unknown action");
 	}
+}
+
+function maybeClearSelfOffer(userId, key, emptyResponse) {
+	const storedOffer = props.getProperty("offer");
+	const storedOwnerId = props.getProperty("offerOwnerId");
+
+	if (!storedOffer) {
+		return respondJSON({ offer: null, ownerId: null });
+	}
+
+	if (storedOwnerId && storedOwnerId === userId) {
+		props.deleteProperty("offer");
+		props.deleteProperty("offerOwnerId");
+		return emptyResponse();
+	}
+
+	return respondJSON({ offer: storedOffer, ownerId: storedOwnerId });
+}
+
+function maybeClearSelfAnswer(userId, key, emptyResponse) {
+	const storedAnswer = props.getProperty("answer");
+	const storedOwnerId = props.getProperty("answerOwnerId");
+
+	if (!storedAnswer) {
+		return respondJSON({ answer: null, ownerId: null });
+	}
+
+	if (storedOwnerId && storedOwnerId === userId) {
+		props.deleteProperty("answer");
+		props.deleteProperty("answerOwnerId");
+		return emptyResponse();
+	}
+
+	return respondJSON({ answer: storedAnswer, ownerId: storedOwnerId });
 }
 
 function respond(text) {
@@ -65,96 +121,43 @@ function respondJSON(obj) {
 }
 ```
 
-# Client code example
+## Temp ID flow
+
+Each client should generate a large random identifier before signaling starts. A UUID is ideal, but any sufficiently large random string is fine:
 
 ```javascript
-const url =
-	"https://script.google.com/macros/s/AKfycbzrDW6pei-ZNnki1AdPZBVxg3WbckDUhAphOHN2NbNgpUSHlvCkAwg7c53YXDreVesQhg/exec";
-
-async function setOffer(sdp) {
-	await fetch(`${url}?action=setOffer&sdp=${encodeURIComponent(sdp)}`);
-}
-
-async function setAnswer(sdp) {
-	await fetch(`${url}?action=setAnswer&sdp=${encodeURIComponent(sdp)}`);
-}
-
-async function addCandidate(type, candidate) {
-	await fetch(
-		`${url}?action=add${type}&candidate=${encodeURIComponent(candidate)}`,
-	);
-}
-
-async function getOffer() {
-	const res = await fetch(`${url}?action=offer`);
-	return (await res.json()).offer;
-}
-
-async function getAnswer() {
-	const res = await fetch(`${url}?action=answer`);
-	return (await res.json()).answer;
-}
-
-async function getCandidates(type) {
-	const res = await fetch(`${url}?action=candidates${type}`);
-	return (await res.json()).candidates || [];
-}
-
-async function startSymmetric() {
-	let offer = await getOffer();
-
-	if (!offer) {
-		console.log("No offer found. I will create one.");
-
-		const offerDesc = await pc.createOffer();
-		await pc.setLocalDescription(offerDesc);
-		await setOffer(JSON.stringify(offerDesc));
-
-		await waitForAnswer();
-	} else {
-		console.log("Offer found. I will create an answer.");
-		await pc.setRemoteDescription(offer);
-
-		const answerDesc = await pc.createAnswer();
-		await pc.setLocalDescription(answerDesc);
-		await setAnswer(JSON.stringify(answerDesc));
-	}
-
-	pollCandidates();
-}
-
-async function waitForAnswer() {
-	let answer = null;
-
-	while (!answer) {
-		await sleep(1000);
-		answer = await getAnswer();
-	}
-
-	console.log("Answer received.");
-	await pc.setRemoteDescription(answer);
-}
-
-pc.onicecandidate = async (e) => {
-	if (e.candidate) {
-		const type = pc.localDescription.type === "offer" ? "A" : "B";
-		await addCandidate(type, JSON.stringify(e.candidate));
-	}
-};
-
-function pollCandidates() {
-	setInterval(async () => {
-		const type = pc.localDescription.type === "offer" ? "B" : "A";
-		const candidates = await getCandidates(type);
-
-		for (const raw of candidates) {
-			await pc.addIceCandidate(JSON.parse(raw));
-		}
-	}, 1000);
-}
+const tempId = crypto.randomUUID();
 ```
 
-# Why use GET-only signaling?
+Every request includes that id in the query string:
+
+```javascript
+await fetch(
+	`${url}?action=setOffer&id=${encodeURIComponent(tempId)}&sdp=${encodeURIComponent(sdp)}`,
+);
+const res = await fetch(`${url}?action=offer&id=${encodeURIComponent(tempId)}`);
+```
+
+When the server receives a `get offer` or `get answer` request, it compares the requesting `id` against the stored `offerOwnerId` or `answerOwnerId`. If they match, it deletes the stored value and returns an empty response so the peer does not see its own offer/answer.
+
+This keeps each side from reacting to its own outbound SDP while still allowing the other side to fetch it normally.
+
+## Reset endpoint
+
+Use the clear-all endpoint only after the WebRTC connection is complete and you want to free the signaling slot for the next call. This should not be used during negotiation because it would wipe the active offer/answer state mid-handshake.
+
+```javascript
+await fetch(`${url}?action=clearAll&id=${encodeURIComponent(tempId)}`);
+```
+
+Typical usage:
+
+```javascript
+// after the data channel and peer connection are both established
+await fetch(`${url}?action=clearAll&id=${encodeURIComponent(tempId)}`);
+```
+
+This makes it easy to reset the server state between sessions without leaving old SDP or candidate data behind for a future connection.
 
 - no CORS preflight issues for a simple public endpoint
 - easier to debug because every action is visible in the URL
