@@ -23,10 +23,30 @@ export class WebRTCManager {
 		this.audioContext = null;
 		this.offerIceCandidates = [];
 		this.answerIceCandidates = [];
+		this.connectionStage = "idle";
 	}
 
 	setStatus(message) {
 		this.onStatus(message);
+		console.log(`[SnippetPhone] ${message}`);
+	}
+
+	logDebug(message, details = null) {
+		const prefix = "[SnippetPhone Debug]";
+		if (details !== null) {
+			console.log(prefix, message, details);
+			return;
+		}
+
+		console.log(prefix, message);
+	}
+
+	updateConnectionStage(stage, message) {
+		this.connectionStage = stage;
+		this.logDebug(`Connection stage: ${stage}`, message || "");
+		if (message) {
+			this.setStatus(message);
+		}
 	}
 
 	/**
@@ -36,51 +56,106 @@ export class WebRTCManager {
 	 * @returns {WebSocket} The active signaling socket.
 	 */
 	connectSignalingServer(url = "ws://34.55.201.219:8080") {
+		if (typeof WebSocket === "undefined") {
+			this.updateConnectionStage(
+				"browser-missing-websocket",
+				"This browser does not support WebSockets. Signaling is unavailable.",
+			);
+			return null;
+		}
+
 		if (
 			this.signalingSocket &&
 			(this.signalingSocket.readyState === WebSocket.OPEN ||
 				this.signalingSocket.readyState === WebSocket.CONNECTING)
 		) {
+			this.logDebug("Reusing existing signaling socket", url);
 			return this.signalingSocket;
 		}
+
+		this.updateConnectionStage(
+			"connecting-signaling",
+			`Connecting to signaling server: ${url}`,
+		);
+		this.logDebug("Attempting signaling connection", url);
 
 		const ws = new WebSocket(url);
 		this.signalingSocket = ws;
 
 		ws.onopen = () => {
-			this.setStatus("Connected to signaling server.");
+			this.updateConnectionStage(
+				"signaling-connected",
+				"Signaling server found and connected.",
+			);
+			this.logDebug("WebSocket connected successfully", url);
 		};
 
-		ws.onclose = () => {
-			this.setStatus("Signaling server disconnected.");
+		ws.onerror = (event) => {
+			this.updateConnectionStage(
+				"signaling-error",
+				"Unable to reach the signaling server. Check the URL and server status.",
+			);
+			this.logDebug("Signaling socket error", event);
+		};
+
+		ws.onclose = (event) => {
+			this.updateConnectionStage(
+				"signaling-closed",
+				`Signaling server disconnected. Code: ${event.code}.`,
+			);
+			this.logDebug("Signaling socket closed", {
+				code: event.code,
+				reason: event.reason || "No reason provided",
+				wasClean: event.wasClean,
+			});
 		};
 
 		ws.onmessage = async (event) => {
 			try {
 				const msg = JSON.parse(event.data);
 				if (!msg || !msg.type) {
+					this.logDebug("Received signaling message without a type", msg);
 					return;
 				}
 
+				this.logDebug(`Received signaling message: ${msg.type}`, msg);
+
 				if (msg.type === "welcome") {
+					this.updateConnectionStage(
+						"signaling-ready",
+						"Signaling server is ready for peer negotiation.",
+					);
 					return;
 				}
 
 				if (msg.type === "offer") {
+					this.updateConnectionStage(
+						"offer-received",
+						"Remote offer received.",
+					);
 					await this.handleIncomingOffer(msg);
 					return;
 				}
 
 				if (msg.type === "answer") {
+					this.updateConnectionStage(
+						"answer-received",
+						"Remote answer received.",
+					);
 					await this.handleIncomingAnswer(msg);
 					return;
 				}
 
 				if (msg.type === "candidate") {
+					this.updateConnectionStage(
+						"candidate-received",
+						"Remote ICE candidate received.",
+					);
 					await this.handleIncomingCandidate(msg);
 				}
 			} catch (error) {
 				console.error("Failed to parse signaling message:", error);
+				this.setStatus("Received an invalid signaling payload.");
 			}
 		};
 
@@ -96,9 +171,14 @@ export class WebRTCManager {
 	sendSignalingMessage(message) {
 		const ws = this.signalingSocket;
 		if (!ws || ws.readyState !== WebSocket.OPEN) {
+			this.logDebug(
+				"Cannot send signaling message; socket is not open",
+				message,
+			);
 			return false;
 		}
 
+		this.logDebug("Sending signaling message", message);
 		ws.send(JSON.stringify(message));
 		return true;
 	}
@@ -189,21 +269,62 @@ export class WebRTCManager {
 			return this.peer;
 		}
 
+		this.updateConnectionStage(
+			"peer-creating",
+			"Creating WebRTC peer connection.",
+		);
 		const peer = new RTCPeerConnection(config);
 		this.peer = peer;
 
+		peer.onsignalingstatechange = () => {
+			this.logDebug("Peer signaling state changed", peer.signalingState);
+			if (peer.signalingState === "stable") {
+				this.updateConnectionStage(
+					"signaling-stable",
+					"Peer connection signaling is stable.",
+				);
+			}
+		};
+
+		peer.oniceconnectionstatechange = () => {
+			this.logDebug("ICE connection state changed", peer.iceConnectionState);
+			if (peer.iceConnectionState === "checking") {
+				this.updateConnectionStage(
+					"ice-checking",
+					"Checking ICE connectivity.",
+				);
+			}
+			if (peer.iceConnectionState === "connected") {
+				this.updateConnectionStage(
+					"ice-connected",
+					"ICE connected. Peer-to-peer networking is ready.",
+				);
+			}
+			if (peer.iceConnectionState === "failed") {
+				this.updateConnectionStage(
+					"ice-failed",
+					"ICE connection failed. Check the TURN/STUN server and credentials.",
+				);
+			}
+		};
+
 		peer.onconnectionstatechange = () => {
 			const { connectionState } = peer;
+			this.logDebug("Peer connection state changed", connectionState);
 			if (connectionState === "connected") {
-				this.setStatus(
+				this.updateConnectionStage(
+					"connected",
 					"WebRTC connection established. VAD snippets can now flow.",
 				);
 			}
 			if (connectionState === "failed") {
-				this.setStatus("Connection failed. Try generating a fresh token pair.");
+				this.updateConnectionStage(
+					"failed",
+					"Connection failed. Try generating a fresh token pair.",
+				);
 			}
 			if (connectionState === "disconnected") {
-				this.setStatus("Connection disconnected.");
+				this.updateConnectionStage("disconnected", "Connection disconnected.");
 			}
 		};
 
@@ -232,6 +353,7 @@ export class WebRTCManager {
 				this.signalingSocket &&
 				this.signalingSocket.readyState === WebSocket.OPEN
 			) {
+				this.logDebug("Local ICE candidate generated", candidate);
 				this.sendSignalingMessage({
 					type: "candidate",
 					candidate,
