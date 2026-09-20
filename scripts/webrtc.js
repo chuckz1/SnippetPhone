@@ -192,6 +192,7 @@ export class WebRTCManager {
 					"connected",
 					"WebRTC connection established. VAD snippets can now flow.",
 				);
+				this.cleanupSignalingServer();
 			}
 			if (connectionState === "failed") {
 				this.updateConnectionStage(
@@ -248,6 +249,21 @@ export class WebRTCManager {
 		this.attachDataChannel(channel);
 
 		return peer;
+	}
+
+	async cleanupSignalingServer() {
+		if (!this.signalingManager) {
+			return;
+		}
+
+		try {
+			await this.signalingManager.clearAll();
+			this.logDebug(
+				"Signaling server state cleared after successful connection.",
+			);
+		} catch (error) {
+			console.warn("Failed to clear signaling server after connection:", error);
+		}
 	}
 
 	attachDataChannel(channel) {
@@ -402,6 +418,18 @@ export class WebRTCManager {
 
 		try {
 			const existingOffer = await this.signalingManager.getOffer();
+			const existingAnswer = await this.signalingManager.getAnswer();
+
+			if (existingOffer && existingAnswer) {
+				this.setStatus(
+					"Stale signaling state detected on the server. Clearing it and creating a fresh offer.",
+				);
+				await this.signalingManager.clearAll();
+				this.setStatus("No offer found. Creating an offer automatically.");
+				await this.generateOfferToken();
+				return "offer";
+			}
+
 			if (existingOffer) {
 				this.setStatus(
 					"Offer found on the signaling server. Answering automatically.",
@@ -413,7 +441,6 @@ export class WebRTCManager {
 				return "answer";
 			}
 
-			const existingAnswer = await this.signalingManager.getAnswer();
 			if (existingAnswer) {
 				this.setStatus(
 					"Answer found on the signaling server. Completing automatically.",

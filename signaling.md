@@ -11,6 +11,15 @@ Use simple GET requests only. The server stores offer/answer/candidate state and
 ```javascript
 const props = PropertiesService.getScriptProperties();
 
+function clearProps() {
+	props.deleteProperty("offer");
+	props.deleteProperty("offerOwnerId");
+	props.deleteProperty("answer");
+	props.deleteProperty("answerOwnerId");
+	props.deleteProperty("candidatesA");
+	props.deleteProperty("candidatesB");
+}
+
 function doGet(e) {
 	const action = e.parameter.action;
 	const userId = e.parameter.id || "";
@@ -65,12 +74,7 @@ function doGet(e) {
 			return respond("OK: candidateB stored");
 
 		case "clearAll":
-			props.deleteProperty("offer");
-			props.deleteProperty("offerOwnerId");
-			props.deleteProperty("answer");
-			props.deleteProperty("answerOwnerId");
-			props.deleteProperty("candidatesA");
-			props.deleteProperty("candidatesB");
+			clearProps();
 			return respond("OK: signaling state cleared");
 
 		default:
