@@ -8,16 +8,25 @@ const state = {
 	signaling: null,
 };
 
-const startMicBtn = document.getElementById("startMicBtn");
-const createOfferBtn = document.getElementById("createOfferBtn");
-const copyOfferBtn = document.getElementById("copyOfferBtn");
-const connectBtn = document.getElementById("connectBtn");
-const copyAnswerBtn = document.getElementById("copyAnswerBtn");
-const completeCallBtn = document.getElementById("completeCallBtn");
-const offerInput = document.getElementById("offerInput");
-const answerInput = document.getElementById("answerInput");
 const statusLog = document.getElementById("statusLog");
-const remoteAudio = document.getElementById("remoteAudio");
+const vadIndicator = document.getElementById("vadIndicator");
+
+function setVADIndicator(active) {
+	if (!vadIndicator) {
+		return;
+	}
+
+	if (active) {
+		vadIndicator.textContent = "Listening";
+		vadIndicator.classList.remove("idle");
+		vadIndicator.classList.add("active");
+		return;
+	}
+
+	vadIndicator.textContent = "Idle";
+	vadIndicator.classList.remove("active");
+	vadIndicator.classList.add("idle");
+}
 
 function setStatus(message) {
 	statusLog.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
@@ -68,9 +77,11 @@ function ensureManagers() {
 		state.vad = new VADManager({
 			onStatus: setStatus,
 			onSpeechStart: () => {
+				setVADIndicator(true);
 				setStatus("Speech detected. Capturing VAD snippet.");
 			},
 			onSpeechEnd: async (audioChunk) => {
+				setVADIndicator(false);
 				if (!audioChunk) {
 					return;
 				}
@@ -96,99 +107,8 @@ function ensureManagers() {
 	}
 }
 
-async function startMicrophone() {
-	ensureManagers();
-	await state.vad.startMic();
-}
-
-async function generateOfferToken() {
-	ensureManagers();
-	await state.vad.startMic();
-	state.webrtc.createPeerConnection();
-	const token = await state.webrtc.generateOfferToken();
-	offerInput.value = "";
-	setStatus("Offer token generated. Copy it and send it to the second client.");
-	return token;
-}
-
-async function processIncomingToken() {
-	ensureManagers();
-	await state.vad.startMic();
-	const rawText = offerInput.value.trim();
-	const token = await state.webrtc.processIncomingToken(rawText);
-	if (token) {
-		answerInput.value = "";
-	}
-	return token;
-}
-
-async function completeOfferWithAnswer() {
-	ensureManagers();
-	const rawText = answerInput.value.trim();
-	await state.webrtc.completeOfferWithAnswer(rawText);
-}
-
-async function copyToClipboard(value) {
-	if (!value) {
-		setStatus("There is nothing to copy yet.");
-		return;
-	}
-
-	try {
-		await navigator.clipboard.writeText(value);
-		setStatus("Copied to clipboard.");
-	} catch (error) {
-		console.error(error);
-		setStatus("Clipboard access failed. You can copy the text manually.");
-	}
-}
-
-async function copyGeneratedOffer() {
-	ensureManagers();
-	if (!state.webrtc.generatedOfferToken) {
-		setStatus("Generate an offer token first.");
-		return;
-	}
-
-	await copyToClipboard(state.webrtc.generatedOfferToken);
-}
-
-async function copyGeneratedAnswer() {
-	ensureManagers();
-	if (!state.webrtc.generatedAnswerToken) {
-		setStatus("Generate an answer token first.");
-		return;
-	}
-
-	await copyToClipboard(state.webrtc.generatedAnswerToken);
-}
-
-startMicBtn.addEventListener("click", async () => {
-	await startMicrophone();
-});
-
-createOfferBtn.addEventListener("click", async () => {
-	await generateOfferToken();
-});
-
-copyOfferBtn.addEventListener("click", async () => {
-	await copyGeneratedOffer();
-});
-
-connectBtn.addEventListener("click", async () => {
-	await processIncomingToken();
-});
-
-copyAnswerBtn.addEventListener("click", async () => {
-	await copyGeneratedAnswer();
-});
-
-completeCallBtn.addEventListener("click", async () => {
-	await completeOfferWithAnswer();
-});
-
 setStatus(
-	"Ready to start a call. Generate an offer, copy it, transfer it manually, then complete the call with the answer token.",
+	"Initializing the signaling and audio pipeline. The app will connect automatically.",
 );
 
 async function initializeVAD() {

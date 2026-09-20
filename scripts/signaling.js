@@ -73,9 +73,6 @@ export class SignalManager {
 			this.setStatus(
 				"Signaling server found and connected. Starting automatic negotiation.",
 			);
-			console.log(
-				"[SignalManager] Signaling server found and connected. Starting automatic negotiation.",
-			);
 			return true;
 		} catch (error) {
 			console.warn("Signaling server verification failed:", error);

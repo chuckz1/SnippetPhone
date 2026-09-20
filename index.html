@@ -18,40 +18,24 @@
 		</header>
 
 		<section class="panel">
-			<h2>1. Allow microphone access</h2>
-			<button id="startMicBtn" class="primary">Start microphone</button>
+			<h2>1. Automatic pairing</h2>
 			<p class="help-text">
-				This page does not use a signaling server. You will copy and paste the WebRTC
-				tokens between the two clients manually.
+				The browser negotiates automatically over the signaling server. Once the app initializes,
+				it will detect the peer, complete the WebRTC handshake, and connect without manual token
+				copying.
 			</p>
-		</section>
-
-		<section class="panel">
-			<h2>2. Manual token transfer</h2>
-			<div class="button-row">
-				<button id="createOfferBtn" class="primary">Generate offer</button>
-				<button id="copyOfferBtn" class="secondary">Copy offer</button>
-				<button id="connectBtn" class="primary">Connect / Generate answer</button>
-				<button id="copyAnswerBtn" class="secondary">Copy answer</button>
-			</div>
-			<div class="button-row">
-				<button id="completeCallBtn" class="primary">Complete call</button>
-			</div>
-
-			<div class="token-fields">
-				<label for="offerInput">Offer token</label>
-				<textarea id="offerInput" rows="8" placeholder="Paste the offer token from the caller here."></textarea>
-
-				<label for="answerInput">Answer token</label>
-				<textarea id="answerInput" rows="8"
-					placeholder="Paste the answer token from the receiver here."></textarea>
-			</div>
 		</section>
 
 		<section class="panel status-panel">
 			<h2>Connection status</h2>
 			<div id="statusLog" class="status-log" aria-live="polite">
 				Ready to start a call.
+			</div>
+			<div class="vad-indicator-wrap">
+				<span class="vad-indicator-label">Voice activity</span>
+				<span id="vadIndicator" class="vad-indicator idle" aria-live="polite">
+					Idle
+				</span>
 			</div>
 		</section>
 
