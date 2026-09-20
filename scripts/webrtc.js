@@ -419,7 +419,7 @@ export class WebRTCManager {
 		try {
 			const existingOffer = await this.signalingManager.getOffer();
 			const existingAnswer = await this.signalingManager.getAnswer();
-
+			console.log("Here");
 			if (existingOffer && existingAnswer) {
 				this.setStatus(
 					"Stale signaling state detected on the server. Clearing it and creating a fresh offer.",
