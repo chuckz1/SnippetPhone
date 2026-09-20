@@ -56,6 +56,9 @@ function ensureManagers() {
 		});
 		state.signaling.connect().then((connected) => {
 			if (connected) {
+				console.log(
+					"[Main] Signaling success callback fired. Starting automatic negotiation.",
+				);
 				state.webrtc.autoNegotiate();
 			}
 		});

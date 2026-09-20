@@ -1,5 +1,5 @@
 const DEFAULT_SIGNALING_URL =
-	"https://script.google.com/macros/s/AKfycbzrDW6pei-ZNnki1AdPZBVxg3WbckDUhAphOHN2NbNgpUSHlvCkAwg7c53YXDreVesQhg/exec";
+	"https://toward-independence-cyber-bathroom.trycloudflare.com";
 
 /**
  * Manages the GET-only signaling flow used by the Apps Script signaling endpoint.
@@ -38,7 +38,12 @@ export class SignalManager {
 
 		try {
 			await this.verifyServer();
-			this.setStatus("Signaling server found and connected.");
+			this.setStatus(
+				"Signaling server found and connected. Starting automatic negotiation.",
+			);
+			console.log(
+				"[SignalManager] Signaling server found and connected. Starting automatic negotiation.",
+			);
 			return true;
 		} catch (error) {
 			console.warn("Signaling server verification failed:", error);
@@ -89,24 +94,27 @@ export class SignalManager {
 	}
 
 	async setOffer(sdp) {
-		await fetch(
-			`${this.serverUrl}?action=setOffer&sdp=${encodeURIComponent(sdp)}`,
-		);
+		const url = `${this.serverUrl}?action=setOffer&sdp=${encodeURIComponent(sdp)}`;
+		console.log("[SignalManager] Sending offer to signaling server:", url);
+		await fetch(url);
 	}
 
 	async setAnswer(sdp) {
-		await fetch(
-			`${this.serverUrl}?action=setAnswer&sdp=${encodeURIComponent(sdp)}`,
-		);
+		const url = `${this.serverUrl}?action=setAnswer&sdp=${encodeURIComponent(sdp)}`;
+		console.log("[SignalManager] Sending answer to signaling server:", url);
+		await fetch(url);
 	}
 
 	async addCandidate(type, candidate) {
 		const candidateType = type.startsWith("Candidate")
 			? type
 			: `Candidate${type}`;
-		await fetch(
-			`${this.serverUrl}?action=add${candidateType}&candidate=${encodeURIComponent(candidate)}`,
+		const url = `${this.serverUrl}?action=add${candidateType}&candidate=${encodeURIComponent(candidate)}`;
+		console.log(
+			"[SignalManager] Sending ICE candidate to signaling server:",
+			url,
 		);
+		await fetch(url);
 	}
 
 	async getOffer() {

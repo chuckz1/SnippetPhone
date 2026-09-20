@@ -88,6 +88,10 @@ export class WebRTCManager {
 		);
 
 		if (this.signalingManager) {
+			console.log(
+				"[SnippetPhone] Sending auto-generated answer to signaling server.",
+				peer.localDescription,
+			);
 			this.signalingManager
 				.setAnswer(JSON.stringify(peer.localDescription))
 				.catch((error) => {
@@ -377,6 +381,10 @@ export class WebRTCManager {
 
 		this.generatedOfferToken = JSON.stringify(token, null, 2);
 		if (this.signalingManager) {
+			console.log(
+				"[SnippetPhone] Sending auto-generated offer to signaling server.",
+				peer.localDescription,
+			);
 			this.signalingManager
 				.setOffer(JSON.stringify(peer.localDescription))
 				.catch((error) => {
