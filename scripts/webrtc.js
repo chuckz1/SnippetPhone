@@ -1,5 +1,14 @@
 const config = {
-	iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+	iceServers: [
+		{
+			urls: [
+				"stun:34.55.201.219:3478",
+				"turn:34.55.201.219:3478?transport=udp",
+			],
+			username: "testuser",
+			credential: "testpassword",
+		},
+	],
 };
 
 export class WebRTCManager {

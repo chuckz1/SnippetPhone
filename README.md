@@ -35,6 +35,7 @@ http://localhost:8000
 4. Choose the branch to publish, usually `main`.
 5. Set the folder to `/root` or `/` depending on the repository structure.
 6. Save and wait for the site to publish.
+7. Go to https://chuckz1.github.io/SnippetPhone/
 
 ## Notes
 
