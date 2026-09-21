@@ -67,27 +67,7 @@ export class SignalManager {
 	async connect() {
 		this.setStatus(`Connecting to signaling server: ${this.serverUrl}`);
 		this.startPolling();
-
-		try {
-			await this.verifyServer();
-			this.setStatus(
-				"Signaling server found and connected. Starting automatic negotiation.",
-			);
-			return true;
-		} catch (error) {
-			console.warn("Signaling server verification failed:", error);
-			this.setStatus(
-				"Unable to reach the signaling server. Check the URL and server status.",
-			);
-			return false;
-		}
-	}
-
-	async verifyServer() {
-		const response = await fetch(this.buildSignalUrl("clear"));
-		if (!response.ok) {
-			throw new Error(`Server verification failed: ${response.status}`);
-		}
+		this.setStatus("Starting automatic negotiation");
 		return true;
 	}
 

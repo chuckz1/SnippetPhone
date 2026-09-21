@@ -122,14 +122,8 @@ function ensureManagers() {
 				// do not require a separate audio element in the DOM.
 			},
 		});
-		state.signaling.connect().then((connected) => {
-			if (connected) {
-				console.log(
-					"[Main] Signaling success callback fired. Starting automatic negotiation.",
-				);
-				state.signaling.autoNegotiate(state.webrtc);
-			}
-		});
+		console.log("[Main] Starting automatic negotiation without a reset.");
+		state.signaling.autoNegotiate(state.webrtc);
 	}
 
 	if (!state.vad) {
