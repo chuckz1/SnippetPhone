@@ -127,7 +127,7 @@ function ensureManagers() {
 				console.log(
 					"[Main] Signaling success callback fired. Starting automatic negotiation.",
 				);
-				state.webrtc.autoNegotiate();
+				state.signaling.autoNegotiate(state.webrtc);
 			}
 		});
 	}

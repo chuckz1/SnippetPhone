@@ -382,107 +382,29 @@ export class WebRTCManager {
 		}
 	}
 
-	async generateOfferToken() {
+	async createOffer() {
 		const peer = this.createPeerConnection();
 		const offer = await peer.createOffer();
 		await peer.setLocalDescription(offer);
 		await this.waitForIceGathering();
 
-		const token = {
-			version: 1,
-			type: "offer",
-			sdp: peer.localDescription.sdp,
-			candidates: this.offerIceCandidates.slice(),
-		};
+		const sdp = peer.localDescription?.sdp || "";
+		this.generatedOfferToken = sdp;
 
-		this.generatedOfferToken = JSON.stringify(token, null, 2);
 		if (this.signalingManager) {
 			console.log(
 				"[SnippetPhone] Sending auto-generated offer to signaling server.",
-				peer.localDescription,
+				sdp,
 			);
-			this.signalingManager
-				.setOffer(JSON.stringify(peer.localDescription))
-				.catch((error) => {
-					console.warn("Failed to store offer on signaling server:", error);
-				});
+			await this.signalingManager.setOffer(sdp);
 		}
-		return this.generatedOfferToken;
+
+		this.setStatus("Offer created and stored on the signaling server.");
+		return sdp;
 	}
 
-	async autoNegotiate() {
-		if (!this.signalingManager) {
-			this.setStatus("Signaling is not available yet.");
-			return null;
-		}
-
-		try {
-			const stateResponse = await this.signalingManager.getState();
-			const state = Number(stateResponse.state ?? 0);
-			const data = stateResponse.data;
-
-			if (state === 0) {
-				const next = await this.signalingManager.getState();
-				if (next.state === 1 && next.data === "create offer") {
-					this.setStatus(
-						"No peer is active yet. Creating an offer automatically.",
-					);
-					await this.generateOfferToken();
-					return "offer";
-				}
-			}
-
-			if (state === 1 && data === "create offer") {
-				this.setStatus("Peer discovered. Creating an offer automatically.");
-				await this.generateOfferToken();
-				return "offer";
-			}
-
-			if (state === 1 && data === "wait") {
-				return "wait";
-			}
-
-			if (state === 2 && data && data !== "accepted") {
-				this.setStatus(
-					"Offer found on the signaling server. Answering automatically.",
-				);
-				await this.handleIncomingOffer({
-					sdp: data,
-					candidates: [],
-				});
-				return "answer";
-			}
-
-			if (state === 3 && data && data !== "accepted") {
-				this.setStatus(
-					"Answer found on the signaling server. Completing automatically.",
-				);
-				if (!this.peer) {
-					this.createPeerConnection();
-				}
-				await this.handleIncomingAnswer({
-					sdp: data,
-					candidates: [],
-				});
-				return "connected";
-			}
-
-			this.setStatus(
-				"No active handshake was found. Creating an offer automatically.",
-			);
-			const started = await this.signalingManager.getState();
-			if (started.state === 1 && started.data === "create offer") {
-				await this.generateOfferToken();
-				return "offer";
-			}
-			return "wait";
-		} catch (error) {
-			console.error("Automatic negotiation failed:", error);
-			this.setStatus(
-				"Automatic signaling setup failed. Check the server and browser console.",
-			);
-			return null;
-		}
+	async generateOfferToken() {
+		return this.createOffer();
 	}
 
 	async processIncomingToken(rawText) {

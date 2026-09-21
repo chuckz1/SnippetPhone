@@ -29,6 +29,7 @@ export class SignalManager {
 		this.hasSentOffer = false;
 		this.hasSentAnswer = false;
 		this.signalingComplete = false;
+		this.webrtcManager = null;
 	}
 
 	createTempId() {
@@ -151,6 +152,74 @@ export class SignalManager {
 		return result;
 	}
 
+	async runSignalStateMachine(webrtcManager, response = null) {
+		if (!webrtcManager) {
+			return null;
+		}
+
+		const currentResponse = response ?? (await this.getState());
+		const previousState = this.currentState ?? null;
+		const state = Number(currentResponse.state ?? 0);
+		const data = currentResponse.data;
+		this.currentState = state;
+
+		if (previousState !== state) {
+			console.log(
+				`[SignalManager] State changed: ${previousState ?? "unknown"} -> ${state}`,
+				{ data },
+			);
+			this.setStatus(
+				`Signal state changed: ${previousState ?? "unknown"} -> ${state}`,
+			);
+		}
+
+		if (state === 0) {
+			this.setStatus("No active handshake found. Creating an offer.");
+			return webrtcManager.createOffer();
+		}
+
+		if (state === 1 && data === "create offer") {
+			this.setStatus("Peer discovered. Creating an offer.");
+			return webrtcManager.createOffer();
+		}
+
+		if (state === 1 && data === "wait") {
+			return "wait";
+		}
+
+		if (state === 2 && data && data !== "accepted") {
+			this.setStatus("Offer received. Preparing automatic answer.");
+			return webrtcManager.handleIncomingOffer({ sdp: data, candidates: [] });
+		}
+
+		if (state === 3 && data && data !== "accepted") {
+			this.setStatus("Answer received. Completing peer connection.");
+			return webrtcManager.handleIncomingAnswer({
+				sdp: data,
+				candidates: [],
+			});
+		}
+
+		return "wait";
+	}
+
+	async autoNegotiate(webrtcManager) {
+		this.webrtcManager = webrtcManager ?? this.webrtcManager;
+		if (!this.webrtcManager) {
+			return null;
+		}
+
+		try {
+			return await this.runSignalStateMachine(this.webrtcManager);
+		} catch (error) {
+			console.error("Automatic negotiation failed:", error);
+			this.setStatus(
+				"Automatic signaling setup failed. Check the server and browser console.",
+			);
+			return null;
+		}
+	}
+
 	/**
 	 * Clears the stored signaling handshake on the server after a successful
 	 * connection so the same server slot can be reused for a future call.
@@ -237,30 +306,7 @@ export class SignalManager {
 
 		try {
 			const response = await this.getState();
-			const state = Number(response.state ?? 0);
-			const data = response.data;
-
-			if (state === 1 && data === "wait") {
-				return;
-			}
-
-			if (state === 2 && data && data !== "accepted" && !this.hasSentOffer) {
-				const offerSignature = JSON.stringify(data);
-				if (offerSignature !== this.lastOfferSignature) {
-					this.lastOfferSignature = offerSignature;
-					this.onOffer({ sdp: data });
-				}
-				return;
-			}
-
-			if (state === 3 && data && data !== "accepted") {
-				const answerSignature = JSON.stringify(data);
-				if (answerSignature !== this.lastAnswerSignature) {
-					this.lastAnswerSignature = answerSignature;
-					this.onAnswer({ sdp: data });
-					this.stopPolling();
-				}
-			}
+			await this.runSignalStateMachine(this.webrtcManager ?? null, response);
 		} catch (error) {
 			console.warn("Failed to poll signaling state:", error);
 			this.setStatus(
