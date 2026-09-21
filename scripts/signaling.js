@@ -30,6 +30,9 @@ export class SignalManager {
 		this.hasSentAnswer = false;
 		this.signalingComplete = false;
 		this.webrtcManager = null;
+		this.pendingCandidates = [];
+		this.pendingCandidateTimer = null;
+		this.candidateFlushDelayMs = 1000;
 	}
 
 	createTempId() {
@@ -211,14 +214,41 @@ export class SignalManager {
 		const candidateType = type.startsWith("Candidate")
 			? type
 			: `Candidate${type}`;
-		const url = this.buildSignalUrl(`add${candidateType}`, {
-			candidate,
-		});
-		console.log(
-			"[SignalManager] Sending ICE candidate to signaling server:",
-			url,
+		const value =
+			typeof candidate === "string" ? candidate : JSON.stringify(candidate);
+		const entry = { type: candidateType, value };
+		const alreadyQueued = this.pendingCandidates.some(
+			(item) => item.type === candidateType && item.value === value,
 		);
-		await fetch(url);
+
+		if (!alreadyQueued) {
+			this.pendingCandidates.push(entry);
+		}
+
+		if (this.pendingCandidateTimer) {
+			clearTimeout(this.pendingCandidateTimer);
+		}
+
+		this.pendingCandidateTimer = setTimeout(async () => {
+			const batch = [...this.pendingCandidates];
+			this.pendingCandidates = [];
+			this.pendingCandidateTimer = null;
+
+			if (!batch.length) {
+				return;
+			}
+
+			const payload = JSON.stringify({
+				type: "ice-candidates",
+				candidates: batch,
+			});
+
+			console.log(
+				"[SignalManager] Debounced ICE candidate update scheduled for delivery:",
+				batch,
+			);
+			await this.setState(payload);
+		}, this.candidateFlushDelayMs);
 	}
 
 	async getOffer() {
@@ -279,7 +309,7 @@ export class SignalManager {
 			this.stopPolling();
 			return;
 		}
-		// console.log("poll triggered");
+		console.log("poll triggered");
 
 		try {
 			const response = await this.getState();
