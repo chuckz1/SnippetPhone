@@ -64,13 +64,6 @@ export class SignalManager {
 		console.log(`[SignalManager] ${message}`);
 	}
 
-	async connect() {
-		this.setStatus(`Connecting to signaling server: ${this.serverUrl}`);
-		this.startPolling();
-		this.setStatus("Starting automatic negotiation");
-		return true;
-	}
-
 	startPolling() {
 		if (this.pollTimer) {
 			return;
@@ -189,6 +182,9 @@ export class SignalManager {
 			return null;
 		}
 
+		this.startPolling();
+		this.setStatus("Starting automatic negotiation");
+
 		try {
 			return await this.runSignalStateMachine(this.webrtcManager);
 		} catch (error) {
@@ -283,7 +279,7 @@ export class SignalManager {
 			this.stopPolling();
 			return;
 		}
-		console.log("poll triggered");
+		// console.log("poll triggered");
 
 		try {
 			const response = await this.getState();
