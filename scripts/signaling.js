@@ -111,6 +111,7 @@ export class SignalManager {
 	}
 
 	async setOffer(sdp) {
+		console.log("latch was set for offer");
 		this.hasSentOffer = true;
 		this.hasSentAnswer = false;
 		this.signalingComplete = false;
@@ -147,6 +148,11 @@ export class SignalManager {
 			this.setStatus(
 				`Signal state changed: ${previousState ?? "unknown"} -> ${state}`,
 			);
+		}
+
+		if (state === 2 && this.hasSentOffer) {
+			this.setStatus("Offer sent. Waiting for the peer answer at state 3.");
+			return "wait";
 		}
 
 		if (state === 0) {
