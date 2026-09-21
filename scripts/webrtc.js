@@ -389,17 +389,23 @@ export class WebRTCManager {
 		await this.waitForIceGathering();
 
 		const sdp = peer.localDescription?.sdp || "";
+		const candidateCount = this.offerIceCandidates.length;
 		this.generatedOfferToken = sdp;
 
 		if (this.signalingManager) {
 			console.log(
 				"[SnippetPhone] Sending auto-generated offer to signaling server.",
-				sdp,
+				{
+					sdp,
+					candidateCount,
+				},
 			);
 			await this.signalingManager.setOffer(sdp);
 		}
 
-		this.setStatus("Offer created and stored on the signaling server.");
+		this.setStatus(
+			`Offer created and stored on the signaling server with ${candidateCount} ICE candidates.`,
+		);
 		return sdp;
 	}
 

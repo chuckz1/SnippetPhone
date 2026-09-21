@@ -111,10 +111,14 @@ export class SignalManager {
 	}
 
 	async setOffer(sdp) {
-		console.log("latch was set for offer");
 		this.hasSentOffer = true;
 		this.hasSentAnswer = false;
 		this.signalingComplete = false;
+		this.pendingCandidates = [];
+		if (this.pendingCandidateTimer) {
+			clearTimeout(this.pendingCandidateTimer);
+			this.pendingCandidateTimer = null;
+		}
 		const result = await this.setState(sdp);
 		console.log("[SignalManager] Sending offer to signaling server:", result);
 		return result;
@@ -222,6 +226,13 @@ export class SignalManager {
 	}
 
 	async addCandidate(type, candidate) {
+		if (this.hasSentOffer || this.hasSentAnswer) {
+			console.log(
+				"[SignalManager] Ignoring ICE candidate update after offer/answer was already sent.",
+			);
+			return;
+		}
+
 		const candidateType = type.startsWith("Candidate")
 			? type
 			: `Candidate${type}`;
