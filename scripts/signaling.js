@@ -283,6 +283,7 @@ export class SignalManager {
 			this.stopPolling();
 			return;
 		}
+		console.log("poll triggered");
 
 		try {
 			const response = await this.getState();
