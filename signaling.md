@@ -2,236 +2,265 @@
 
 const url = "https://script.google.com/macros/s/AKfycbzrDW6pei-ZNnki1AdPZBVxg3WbckDUhAphOHN2NbNgpUSHlvCkAwg7c53YXDreVesQhg/exec";
 
-# Three-endpoint signaling flow
+# Role-based signaling flow
 
-Use simple GET requests only. The server owns a single state machine variable called `clientstate` and a current payload value. There are only three public actions: `get`, `set`, and `clear`.
+The server assigns a unique `userId` to each client when they first connect.
 
-This is intentionally simpler than separate offer/answer stores. The client will poll the server and interpret the returned state/data pair. We are keeping client updates for later; the server protocol is what matters here.
+The server maintains a rolling `userId` counter that starts at `1` and increments upward until it reaches `100`. When the counter hits `100`, it rolls back to the original starting value of `1` instead of continuing higher. This prevents stale clients from holding an ID long enough to collide with a newer client using the same value.
 
-## State machine
+This flow is based on role assignment, not on a shared state-value pair. The server tracks each client by its assigned `userId` and stores that client's role and signaling state.
 
-- `0` = no clients active / default state
-- `1` = first client has discovered a peer and is creating an offer
-- `2` = offer was created and is waiting for the answer
-- `3` = answer was created and is now waiting for the connection to complete
+## Core rules
 
-## Server behavior
+- The first client to connect gets role `offerer`.
+- The second client to connect gets role `answerer`.
+- The server assigns incremental `userId` values starting at `1`.
+- When the counter reaches `100`, the next user gets `userId = 1` again.
+- If a third client tries to request a role, the server resets the role list first, then assigns that third client the first client role and restarts the session.
+- Any call to another endpoint with an invalid `userId` must return `restart`.
+- If the server responds with `restart`, the client must re-initiate the handshake from the beginning, including calling `get role()` again.
+- The `get` endpoints are expected to be polled.
 
-### State `0`
+## Server-side tracking
 
-- `set` does nothing
-- `clear` does nothing
-- `get` moves the server to state `1` and returns:
-
-```json
-{ "state": 1, "data": "create offer" }
-```
-
-This is the first call that discovers the handshake and tells the original caller to create an offer.
-
-### State `1`
-
-- `get` returns:
+The server stores the active session as a small set of variables, for example:
 
 ```json
-{ "state": 1, "data": "wait" }
+{
+	"userIdCounter": "3",
+	"offererId": "1",
+	"answererId": "2",
+	"offerSdp": "...",
+	"answerSdp": "...",
+	"offerIceCandidates": ["..."],
+	"answerIceCandidates": ["..."]
+}
 ```
 
-- The first client creates an offer and sends it through `set`.
-- `set` with the offer transitions the server to state `2` and returns:
+There will only ever be one offerer and one answerer in the active session, so the server does not need to keep a list of client records. It only needs the IDs for those two roles plus the current signaling payloads and the next ID to assign.
+
+## Role assignment
+
+### `get role()`
+
+The client first calls `get role()` with no parameters.
+
+- If there is no active session, the server assigns the next incremental `userId` value and returns:
 
 ```json
-{ "state": 2, "data": "accepted" }
+{ "userId": 1, "role": "offerer", "state": "waitingForOffer" }
 ```
 
-The sent offer payload is stored as the server data value and will be returned by later `get` requests until the answer is set.
-
-Any other `get` requests while state is `1` should keep returning `"wait"` until the offer is posted.
-
-### State `2`
-
-- `get` returns the current offer payload, with the state still set to `2`:
+- If the first client already exists and is in the offerer role, the second client is assigned the next incremental `userId` value and returns:
 
 ```json
-{ "state": 2, "data": "<offer payload>" }
+{ "userId": 2, "role": "answerer", "state": "waitingForAnswer" }
 ```
 
-- The offering client waits for the second client to receive the offer, create an answer, and send it through `set`.
-- `set` with the answer transitions the server to state `3` and returns:
+- Once the counter reaches `100`, the next assigned ID resets to `1` and the cycle continues.
+
+- If a third client attempts to get a role while the session is already full, the server first clears the stored role list, then assigns that third client the first client role and restarts the session.
+
+## Handshake flow
+
+### Offerer sends offer
+
+```text
+send offer (int userId, string offerSdp)
+```
+
+- The offerer sends their SDP to the server using their assigned `userId`.
+- The server stores the offer and updates the state to reflect that the offer is waiting for the answer.
+- Response:
 
 ```json
-{ "state": 3, "data": "accepted" }
+{ "status": "accepted" }
 ```
 
-The sent answer payload is stored as the server data value and will be returned by later `get` requests until the connection is cleared.
+### Offerer sends offer ICE candidates
 
-### State `3`
+```text
+send offer ICE (int userId, string iceCandidate)
+```
 
-- The second client waits while the first client polls for the answer.
-- `get` returns:
+- The server stores the ICE candidate for the offerer.
+- Response:
 
 ```json
-{ "state": 3, "data": "<answer payload>" }
+{ "status": "accepted" }
 ```
 
-- `set` does nothing in this state.
+### Answerer gets the offer
 
-- Once the connection is established, the first client calls `clear` to reset the signal server.
-- `clear` resets the server back to state `0` and clears the payload.
-- Any `get` requests after this will start the handshake process anew.
-
-## Apps Script server code
-
-```javascript
-const props = PropertiesService.getScriptProperties();
-const STATE_KEY = "clientstate";
-const DATA_KEY = "data";
-
-function getState() {
-	const value = Number(props.getProperty(STATE_KEY) || 0);
-	return Number.isFinite(value) ? value : 0;
-}
-
-function getPayload() {
-	return props.getProperty(DATA_KEY) || null;
-}
-
-function setState(state, payload) {
-	props.setProperty(STATE_KEY, String(state));
-	if (payload === null) {
-		props.deleteProperty(DATA_KEY);
-		return;
-	}
-	props.setProperty(DATA_KEY, String(payload));
-}
-
-function clearState() {
-	props.deleteProperty(STATE_KEY);
-	props.deleteProperty(DATA_KEY);
-	props.setProperty(STATE_KEY, "0");
-}
-
-function doGet(e) {
-	const action = (e.parameter.action || "").toLowerCase();
-
-	switch (action) {
-		case "get":
-			return respondJSON(handleGet());
-		case "set":
-			return respondJSON(handleSet(e.parameter.data || ""));
-		case "clear":
-			return respondJSON(handleClear());
-		default:
-			return respondJSON({ state: getState(), data: "unknown action" });
-	}
-}
-
-function handleGet() {
-	const currentState = getState();
-
-	if (currentState === 0) {
-		setState(1, "create offer");
-		return { state: 1, data: "create offer" };
-	}
-
-	if (currentState === 1) {
-		return { state: 1, data: "wait" };
-	}
-
-	return { state: currentState, data: getPayload() };
-}
-
-function handleSet(payload) {
-	const currentState = getState();
-
-	if (currentState === 0) {
-		return { state: 0, data: "no-op" };
-	}
-
-	if (currentState === 1) {
-		setState(2, payload);
-		return { state: 2, data: "accepted" };
-	}
-
-	if (currentState === 2) {
-		setState(3, payload);
-		return { state: 3, data: "accepted" };
-	}
-
-	if (currentState === 3) {
-		return { state: 3, data: "accepted" };
-	}
-
-	return { state: currentState, data: getPayload() };
-}
-
-function handleClear() {
-	const currentState = getState();
-
-	if (currentState === 0) {
-		return { state: 0, data: "no-op" };
-	}
-
-	clearState();
-	return { state: 0, data: "cleared" };
-}
-
-function respondJSON(obj) {
-	return ContentService.createTextOutput(JSON.stringify(obj));
-}
+```text
+get offer (int userId)
 ```
+
+- The answerer polls this endpoint with their assigned `userId`.
+- The server returns the current offer SDP when available.
+
+```json
+{ "userId": 2, "offerSdp": "<offer payload>" }
+```
+
+### Answerer gets offer ICE candidates
+
+```text
+get offer ICE (int userId)
+```
+
+- The answerer polls for ICE candidates belonging to the offerer.
+- The server returns the pending ICE candidates.
+- If the `userId` is valid, the server clears the stored offer ICE candidate list after returning it so the same candidates are not sent repeatedly.
+
+```json
+{ "userId": 2, "iceCandidates": ["..."] }
+```
+
+### Answerer sends answer
+
+```text
+send answer (int userId, string answerSdp)
+```
+
+- The answerer sends the SDP answer using their assigned `userId`.
+- The server stores the answer and marks the handshake as complete enough for the peer to begin connection setup.
+- Response:
+
+```json
+{ "status": "accepted" }
+```
+
+### Answerer sends answer ICE candidates
+
+```text
+send answer ICE (int userId, string iceCandidate)
+```
+
+- The server stores the answerer's ICE candidates.
+- Response:
+
+```json
+{ "status": "accepted" }
+```
+
+### Offerer gets the answer
+
+```text
+get answer (int userId)
+```
+
+- The offerer polls this endpoint using their assigned `userId`.
+- The server returns the stored answer when available.
+
+```json
+{ "userId": 1, "answerSdp": "<answer payload>" }
+```
+
+### Offerer gets answer ICE candidates
+
+```text
+get answer ICE (int userId)
+```
+
+- The offerer polls for the answerer's ICE candidates.
+- The server returns the pending ICE candidates.
+- If the `userId` is valid, the server clears the stored answer ICE candidate list after returning it so the same candidates are not sent repeatedly.
+
+```json
+{ "userId": 1, "iceCandidates": ["..."] }
+```
+
+## Invalid userId behavior
+
+Any endpoint other than `get role()` requires a valid `userId`.
+
+- If a request uses an unknown or stale `userId`, the server returns:
+
+```json
+{ "status": "restart" }
+```
+
+- The client must then start the handshake again from the beginning by calling `get role()` with no parameters.
+
+## Session reset
+
+### `clear Server()`
+
+This endpoint is used to clear the server state after the connection is established.
+
+```text
+clear Server()
+```
+
+When called, the server clears all assignments, roles, and stored signaling data and returns:
+
+```json
+{ "status": "cleared" }
+```
+
+After that, the next client to connect can begin a fresh handshake.
 
 ## Request examples
 
-### Start the handshake
+### Request a role before assignment
 
 ```javascript
-const response = await fetch(`${url}?action=get`);
+const response = await fetch(`${url}?action=getRole`);
 const result = await response.json();
-// { state: 1, data: "create offer" }
+// { userId: 1, role: "offerer", state: "waitingForOffer" }
 ```
 
-### Send the offer
+### Send an offer
 
 ```javascript
 const response = await fetch(
-	`${url}?action=set&data=${encodeURIComponent(offerSdp)}`,
+	`${url}?action=sendOffer&userId=1&data=${encodeURIComponent(offerSdp)}`,
 );
 const result = await response.json();
-// { state: 2, data: "accepted" }
+// { status: "accepted" }
 ```
 
-### Get the offer or answer
+### Get the offer
 
 ```javascript
-const response = await fetch(`${url}?action=get`);
+const response = await fetch(`${url}?action=getOffer&userId=2`);
 const result = await response.json();
-// state 2 => offer is waiting
-// state 3 => answer is waiting
+// { userId: 2, offerSdp: "..." }
 ```
 
 ### Send the answer
 
 ```javascript
 const response = await fetch(
-	`${url}?action=set&data=${encodeURIComponent(answerSdp)}`,
+	`${url}?action=sendAnswer&userId=2&data=${encodeURIComponent(answerSdp)}`,
 );
 const result = await response.json();
-// { state: 3, data: "accepted" }
+// { status: "accepted" }
 ```
 
-### Clear the server after the connection is established
+### Get the answer
 
 ```javascript
-const response = await fetch(`${url}?action=clear`);
+const response = await fetch(`${url}?action=getAnswer&userId=1`);
 const result = await response.json();
-// { state: 0, data: "cleared" }
+// { userId: 1, answerSdp: "..." }
+```
+
+### Reset after connection
+
+```javascript
+const response = await fetch(`${url}?action=clearServer`);
+const result = await response.json();
+// { status: "cleared" }
 ```
 
 ## Notes
 
-- The server uses one authoritative `clientstate` variable to drive the handshake.
-- The payload is the current SDP string that clients must read and write during the workflow.
-- This deliberately avoids per-client IDs and separate offer/answer ownership variables.
-- The `clear` endpoint is only used after the connection is live so the next handshake can start cleanly.
-- This is a two-peer state machine. It is intentionally simple and meant to be easy to reason about before the client code is updated to match it.
+- The server owns the authoritative client registry and assigns the `userId` values.
+- `userId` values increment from `1` upward and roll back to `1` at `100` to avoid stale-client collisions.
+- The first client is the offerer and the second client is the answerer.
+- A third client forces a `restart` to maintain a two-peer session.
+- Any invalid `userId` or restart signal means all clients must re-enter the role-assignment flow.
+- The server tracks client role and state by `userId`, which keeps the signaling flow explicit and easy to reason about.
+- When a valid client calls `get offer ICE` or `get answer ICE`, the server clears that candidate list after returning it so polling does not repeat the same ICE candidates.

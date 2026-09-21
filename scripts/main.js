@@ -95,14 +95,27 @@ function ensureManagers() {
 	if (!state.signaling) {
 		state.signaling = new SignalManager({
 			onStatus: setStatus,
-			onOffer: (message) => {
-				if (state.webrtc) {
-					state.webrtc.handleIncomingOffer(message);
+			onRole: ({ userId, role }) => {
+				setStatus(`Signal role assigned: user ${userId} is ${role}.`);
+			},
+			onOffer: async (message) => {
+				if (!state.webrtc) {
+					return;
+				}
+				const answer = await state.webrtc.handleIncomingOffer(message);
+				if (answer && answer.sdp && state.signaling) {
+					await state.signaling.sendAnswer(answer.sdp, state.signaling.userId);
+					for (const candidate of answer.candidates ?? []) {
+						await state.signaling.sendAnswerIceCandidate(
+							candidate,
+							state.signaling.userId,
+						);
+					}
 				}
 			},
-			onAnswer: (message) => {
+			onAnswer: async (message) => {
 				if (state.webrtc) {
-					state.webrtc.handleIncomingAnswer(message);
+					await state.webrtc.handleIncomingAnswer(message);
 				}
 			},
 			onCandidate: (message) => {
@@ -116,14 +129,22 @@ function ensureManagers() {
 	if (!state.webrtc) {
 		state.webrtc = new WebRTCManager({
 			onStatus: setStatus,
-			signalingManager: state.signaling,
 			onRemoteSnippet: () => {
 				// Remote snippets are played through the WebRTC data channel callback and
 				// do not require a separate audio element in the DOM.
 			},
 		});
-		console.log("[Main] Starting automatic negotiation without a reset.");
-		state.signaling.autoNegotiate(state.webrtc);
+	}
+
+	if (!state.signaling.pollTimer) {
+		state.signaling.beginHandshake({
+			onCreateOffer: async () => {
+				if (!state.webrtc) {
+					return null;
+				}
+				return state.webrtc.createOffer();
+			},
+		});
 	}
 
 	if (!state.vad) {

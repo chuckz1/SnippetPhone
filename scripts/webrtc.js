@@ -12,25 +12,24 @@ const config = {
 };
 
 export class WebRTCManager {
-	constructor({ onStatus, onRemoteSnippet, signalingManager } = {}) {
-		this.onStatus = onStatus || (() => {});
-		this.onRemoteSnippet = onRemoteSnippet || (() => {});
-		this.signalingManager = signalingManager || null;
+	constructor({ onStatus = () => {}, onRemoteSnippet = () => {} } = {}) {
+		this.onStatus = onStatus;
+		this.onRemoteSnippet = onRemoteSnippet;
 		this.peer = null;
 		this.dataChannel = null;
-		this.generatedOfferToken = "";
-		this.generatedAnswerToken = "";
 		this.audioContext = null;
 		this.offerIceCandidates = [];
 		this.answerIceCandidates = [];
 		this.connectionStage = "idle";
 	}
 
+	// Keeps the WebRTC manager independent from the signaling state machine.
 	setStatus(message) {
 		this.onStatus(message);
 		console.log(`[SnippetPhone] ${message}`);
 	}
 
+	// Emits internal debug output without altering the signaling flow.
 	logDebug(message, details = null) {
 		const prefix = "[SnippetPhone Debug]";
 		if (details !== null) {
@@ -41,6 +40,7 @@ export class WebRTCManager {
 		console.log(prefix, message);
 	}
 
+	// Records the current connection stage so callers can reason about the peer lifecycle.
 	updateConnectionStage(stage, message) {
 		this.connectionStage = stage;
 		this.logDebug(`Connection stage: ${stage}`, message || "");
@@ -49,97 +49,7 @@ export class WebRTCManager {
 		}
 	}
 
-	/**
-	 * Handle a remote offer arriving over signaling.
-	 *
-	 * @param {object} message - The incoming signaling payload.
-	 */
-	async handleIncomingOffer(message) {
-		if (!message || !message.sdp) {
-			return;
-		}
-
-		const peer = this.createPeerConnection();
-		this.answerIceCandidates = [];
-		await peer.setRemoteDescription(
-			new RTCSessionDescription({ type: "offer", sdp: message.sdp }),
-		);
-		await this.applyCandidates(message.candidates || []);
-
-		const answer = await peer.createAnswer();
-		await peer.setLocalDescription(answer);
-		await this.waitForIceGathering();
-
-		const answerMessage = {
-			type: "answer",
-			sdp: peer.localDescription.sdp,
-			candidates: this.answerIceCandidates.slice(),
-		};
-
-		this.generatedAnswerToken = JSON.stringify(
-			{
-				version: 1,
-				type: "answer",
-				sdp: peer.localDescription.sdp,
-				candidates: this.answerIceCandidates.slice(),
-			},
-			null,
-			2,
-		);
-
-		if (this.signalingManager) {
-			console.log(
-				"[SnippetPhone] Sending auto-generated answer to signaling server.",
-				peer.localDescription,
-			);
-			this.signalingManager
-				.setAnswer(JSON.stringify(peer.localDescription))
-				.catch((error) => {
-					console.warn("Failed to store answer on signaling server:", error);
-				});
-		}
-		this.setStatus("Offer received. Answer sent over signaling.");
-	}
-
-	/**
-	 * Handle a remote answer arriving over signaling.
-	 *
-	 * @param {object} message - The incoming signaling payload.
-	 */
-	async handleIncomingAnswer(message) {
-		if (!message || !message.sdp) {
-			return;
-		}
-
-		if (!this.peer) {
-			this.setStatus("No active offer exists yet. Generate an offer first.");
-			return;
-		}
-
-		await this.peer.setRemoteDescription(
-			new RTCSessionDescription({ type: "answer", sdp: message.sdp }),
-		);
-		await this.applyCandidates(message.candidates || []);
-		this.setStatus("Answer received. Call is connected.");
-	}
-
-	/**
-	 * Handle a remote ICE candidate arriving over signaling.
-	 *
-	 * @param {object} message - The incoming candidate payload.
-	 */
-	async handleIncomingCandidate(message) {
-		if (!this.peer || !message || !message.candidate) {
-			return;
-		}
-
-		try {
-			await this.peer.addIceCandidate(new RTCIceCandidate(message.candidate));
-		} catch (error) {
-			console.warn("Failed to add remote ICE candidate:", error);
-		}
-	}
-
+	// Creates a single RTCPeerConnection and installs the data-channel callbacks.
 	createPeerConnection() {
 		if (this.peer) {
 			return this.peer;
@@ -192,12 +102,11 @@ export class WebRTCManager {
 					"connected",
 					"WebRTC connection established. VAD snippets can now flow.",
 				);
-				this.cleanupSignalingServer();
 			}
 			if (connectionState === "failed") {
 				this.updateConnectionStage(
 					"failed",
-					"Connection failed. Try generating a fresh token pair.",
+					"Connection failed. Try generating a fresh offer and answer pair.",
 				);
 			}
 			if (connectionState === "disconnected") {
@@ -225,20 +134,6 @@ export class WebRTCManager {
 			) {
 				this.answerIceCandidates.push(candidate);
 			}
-
-			const remoteCandidateType =
-				peer.localDescription && peer.localDescription.type === "offer"
-					? "A"
-					: "B";
-
-			if (this.signalingManager) {
-				this.logDebug("Local ICE candidate generated", candidate);
-				this.signalingManager
-					.addCandidate(remoteCandidateType, JSON.stringify(candidate))
-					.catch((error) => {
-						console.warn("Failed to store ICE candidate:", error);
-					});
-			}
 		};
 
 		peer.ondatachannel = (event) => {
@@ -247,25 +142,10 @@ export class WebRTCManager {
 
 		const channel = peer.createDataChannel("snippetphone");
 		this.attachDataChannel(channel);
-
 		return peer;
 	}
 
-	async cleanupSignalingServer() {
-		if (!this.signalingManager) {
-			return;
-		}
-
-		try {
-			await this.signalingManager.clearAll();
-			this.logDebug(
-				"Signaling server state cleared after successful connection.",
-			);
-		} catch (error) {
-			console.warn("Failed to clear signaling server after connection:", error);
-		}
-	}
-
+	// Binds the data channel to the audio snippet pipeline.
 	attachDataChannel(channel) {
 		if (!channel) {
 			return;
@@ -296,6 +176,7 @@ export class WebRTCManager {
 		};
 	}
 
+	// Publishes audio to the connected peer over the WebRTC data channel.
 	async sendSnippet(audioBuffer) {
 		if (!this.dataChannel) {
 			this.setStatus("No data channel is active yet.");
@@ -311,6 +192,7 @@ export class WebRTCManager {
 		return true;
 	}
 
+	// Plays an incoming PCM buffer through the browser audio pipeline.
 	playSnippet(audioBuffer) {
 		const AudioCtor = window.AudioContext || window.webkitAudioContext;
 		if (!AudioCtor) {
@@ -343,6 +225,7 @@ export class WebRTCManager {
 		this.onRemoteSnippet(audioBufferObject);
 	}
 
+	// Waits until the ICE agent has finished gathering candidates for the current description.
 	waitForIceGathering() {
 		return new Promise((resolve) => {
 			const peer = this.peer;
@@ -367,6 +250,7 @@ export class WebRTCManager {
 		});
 	}
 
+	// Applies a batch of received ICE candidates to the active peer connection.
 	async applyCandidates(candidates = []) {
 		const peer = this.peer;
 		if (!peer || !candidates.length) {
@@ -375,143 +259,109 @@ export class WebRTCManager {
 
 		for (const candidate of candidates) {
 			try {
-				await peer.addIceCandidate(new RTCIceCandidate(candidate));
+				const candidatePayload =
+					candidate && typeof candidate === "object" && candidate.candidate
+						? candidate
+						: { candidate: candidate };
+				await peer.addIceCandidate(new RTCIceCandidate(candidatePayload));
 			} catch (error) {
 				console.warn("Failed to add ICE candidate:", error);
 			}
 		}
 	}
 
+	// Generates a fresh offer payload with its gathered ICE candidates.
 	async createOffer() {
 		const peer = this.createPeerConnection();
 		const offer = await peer.createOffer();
 		await peer.setLocalDescription(offer);
 		await this.waitForIceGathering();
 
-		const sdp = peer.localDescription?.sdp || "";
-		const candidateCount = this.offerIceCandidates.length;
-		this.generatedOfferToken = sdp;
+		const payload = {
+			type: "offer",
+			sdp: peer.localDescription?.sdp || "",
+			candidates: this.offerIceCandidates.slice(),
+		};
+		this.offerIceCandidates = [];
+		return payload;
+	}
 
-		if (this.signalingManager) {
-			console.log(
-				"[SnippetPhone] Sending auto-generated offer to signaling server.",
-				{
-					sdp,
-					candidateCount,
-				},
-			);
-			await this.signalingManager.setOffer(sdp);
+	// Builds a local answer payload after a remote offer has been applied.
+	async createAnswer() {
+		const peer = this.createPeerConnection();
+		const answer = await peer.createAnswer();
+		await peer.setLocalDescription(answer);
+		await this.waitForIceGathering();
+
+		const payload = {
+			type: "answer",
+			sdp: peer.localDescription?.sdp || "",
+			candidates: this.answerIceCandidates.slice(),
+		};
+		this.answerIceCandidates = [];
+		return payload;
+	}
+
+	// Applies the remote offer and any ICE candidates that arrived with it.
+	async setRemoteOffer(message) {
+		if (!message || !message.sdp) {
+			return null;
 		}
 
-		this.setStatus(
-			`Offer created and stored on the signaling server with ${candidateCount} ICE candidates.`,
+		const peer = this.createPeerConnection();
+		await peer.setRemoteDescription(
+			new RTCSessionDescription({ type: "offer", sdp: message.sdp }),
 		);
-		return sdp;
+		await this.applyCandidates(message.candidates || []);
+		return message;
 	}
 
-	async generateOfferToken() {
-		return this.createOffer();
-	}
-
-	async processIncomingToken(rawText) {
-		const tokenText = (rawText || "").trim();
-		if (!tokenText) {
-			this.setStatus("Paste a valid token before connecting.");
+	// Applies the remote answer and any ICE candidates that arrived with it.
+	async setRemoteAnswer(message) {
+		if (!message || !message.sdp) {
 			return null;
-		}
-
-		let token;
-		try {
-			token = JSON.parse(tokenText);
-		} catch (error) {
-			this.setStatus("The pasted token is not valid JSON.");
-			console.error(error);
-			return null;
-		}
-
-		if (!token || !token.type || !token.sdp) {
-			this.setStatus("The token is missing the required WebRTC information.");
-			return null;
-		}
-
-		if (token.type === "offer") {
-			const peer = this.createPeerConnection();
-			this.answerIceCandidates = [];
-			await peer.setRemoteDescription(
-				new RTCSessionDescription({ type: "offer", sdp: token.sdp }),
-			);
-			await this.applyCandidates(token.candidates || []);
-
-			const answer = await peer.createAnswer();
-			await peer.setLocalDescription(answer);
-			await this.waitForIceGathering();
-
-			const answerToken = {
-				version: 1,
-				type: "answer",
-				sdp: peer.localDescription.sdp,
-				candidates: this.answerIceCandidates.slice(),
-			};
-
-			this.generatedAnswerToken = JSON.stringify(answerToken, null, 2);
-			this.setStatus(
-				"Answer token created. Copy it and send it back to the caller.",
-			);
-			return this.generatedAnswerToken;
-		}
-
-		if (token.type === "answer") {
-			if (!this.peer) {
-				this.setStatus(
-					"No active offer exists yet. Generate an offer token first.",
-				);
-				return null;
-			}
-
-			await this.peer.setRemoteDescription(
-				new RTCSessionDescription({ type: "answer", sdp: token.sdp }),
-			);
-			await this.applyCandidates(token.candidates || []);
-			this.setStatus("Answer received. Call is connected.");
-			return null;
-		}
-
-		this.setStatus("Unknown token type. Expected offer or answer.");
-		return null;
-	}
-
-	async completeOfferWithAnswer(rawText) {
-		const tokenText = (rawText || "").trim();
-		if (!tokenText) {
-			this.setStatus("Paste the answer token before completing the call.");
-			return;
-		}
-
-		let token;
-		try {
-			token = JSON.parse(tokenText);
-		} catch (error) {
-			this.setStatus("The pasted answer token is not valid JSON.");
-			console.error(error);
-			return;
-		}
-
-		if (!token || !token.type || token.type !== "answer" || !token.sdp) {
-			this.setStatus("The pasted answer token looks invalid.");
-			return;
 		}
 
 		if (!this.peer) {
-			this.setStatus(
-				"There is no active offer to complete. Generate an offer first.",
-			);
-			return;
+			this.setStatus("No active offer exists yet. Generate an offer first.");
+			return null;
 		}
 
 		await this.peer.setRemoteDescription(
-			new RTCSessionDescription({ type: "answer", sdp: token.sdp }),
+			new RTCSessionDescription({ type: "answer", sdp: message.sdp }),
 		);
-		await this.applyCandidates(token.candidates || []);
-		this.setStatus("Answer applied. The call is now connected.");
+		await this.applyCandidates(message.candidates || []);
+		this.setStatus("Answer received. The call is connected.");
+		return message;
+	}
+
+	// Handles a remote offer payload from the signaling layer and creates the answer.
+	async handleIncomingOffer(message) {
+		if (!message || !message.sdp) {
+			return null;
+		}
+
+		await this.setRemoteOffer(message);
+		const answer = await this.createAnswer();
+		this.setStatus("Offer received. Ready to send the answer.");
+		return answer;
+	}
+
+	// Handles the answer payload returned by the signaling layer.
+	async handleIncomingAnswer(message) {
+		return this.setRemoteAnswer(message);
+	}
+
+	// Accepts a single ICE candidate object from the signaling layer.
+	async handleIncomingCandidate(message) {
+		if (!this.peer || !message || !message.candidate) {
+			return;
+		}
+
+		try {
+			await this.peer.addIceCandidate(new RTCIceCandidate(message.candidate));
+		} catch (error) {
+			console.warn("Failed to add remote ICE candidate:", error);
+		}
 	}
 }

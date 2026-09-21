@@ -2,82 +2,55 @@ const DEFAULT_SIGNALING_URL =
 	"https://script.google.com/macros/s/AKfycbzrDW6pei-ZNnki1AdPZBVxg3WbckDUhAphOHN2NbNgpUSHlvCkAwg7c53YXDreVesQhg/exec";
 
 /**
- * Manages the GET-only signaling flow used by the Apps Script signaling endpoint.
+ * Coordinates the role-based signaling handshake without invoking WebRTC APIs.
  *
- * The browser stores SDP and ICE candidate values by hitting a URL with query parameters,
- * then polls the endpoint for the other peer's values. This avoids CORS issues because all
- * actions are simple GET requests to the same public endpoint.
+ * This manager owns the server interaction and polls the role-based endpoints described in the
+ * docs. It only sends and receives SDP/candidate messages and emits callbacks to the caller so
+ * the WebRTC layer stays focused on peer creation and session description handling.
  */
 export class SignalManager {
 	constructor({
 		url = DEFAULT_SIGNALING_URL,
 		onStatus = () => {},
+		onRole = () => {},
 		onOffer = () => {},
 		onAnswer = () => {},
 		onCandidate = () => {},
+		pollIntervalMs = 1000,
 	} = {}) {
 		this.serverUrl = url;
 		this.onStatus = onStatus;
+		this.onRole = onRole;
 		this.onOffer = onOffer;
 		this.onAnswer = onAnswer;
 		this.onCandidate = onCandidate;
-		this.tempId = this.createTempId();
+		this.pollIntervalMs = pollIntervalMs;
+		this.userId = null;
+		this.role = null;
+		this.handshakeState = "idle";
 		this.pollTimer = null;
-		this.lastOfferSignature = "";
-		this.lastAnswerSignature = "";
-		this.seenCandidates = new Set();
-		this.hasSentOffer = false;
-		this.hasSentAnswer = false;
-		this.signalingComplete = false;
-		this.webrtcManager = null;
-		this.pendingCandidates = [];
-		this.pendingCandidateTimer = null;
-		this.candidateFlushDelayMs = 1000;
+		this.lastRoleResponse = null;
 	}
 
-	createTempId() {
-		if (
-			globalThis.crypto &&
-			typeof globalThis.crypto.randomUUID === "function"
-		) {
-			return globalThis.crypto.randomUUID();
-		}
-		return `temp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-	}
-
-	buildSignalUrl(action, params = {}) {
-		const query = new URLSearchParams({
-			action,
-			...params,
-		});
-		return `${this.serverUrl}?${query.toString()}`;
-	}
-
-	stopPolling() {
-		this.signalingComplete = true;
-		this.setStatus("Stopping signaling polling.");
-		if (this.pollTimer) {
-			clearInterval(this.pollTimer);
-			this.pollTimer = null;
-		}
-	}
-
+	// Publishes a status update to the UI and the console for the current handshake step.
 	setStatus(message) {
 		this.onStatus(message);
 		console.log(`[SignalManager] ${message}`);
 	}
 
-	startPolling() {
-		if (this.pollTimer) {
-			return;
-		}
-
-		this.pollSignalingState();
-		this.pollTimer = setInterval(() => {
-			this.pollSignalingState();
-		}, 1000);
+	// Builds a URL for the Apps Script endpoint while preserving the server contract.
+	buildSignalUrl(action, params = {}) {
+		const query = new URLSearchParams({ action });
+		Object.entries(params).forEach(([key, value]) => {
+			if (value === undefined || value === null) {
+				return;
+			}
+			query.append(key, String(value));
+		});
+		return `${this.serverUrl}?${query.toString()}`;
 	}
 
+	// Normalizes restart responses and other server payloads into a predictable shape.
 	async fetchSignal(action, params = {}) {
 		const url = this.buildSignalUrl(action, params);
 		const response = await fetch(url);
@@ -87,233 +60,166 @@ export class SignalManager {
 
 		const text = await response.text();
 		if (!text) {
-			return { state: 0, data: null };
+			return { status: "empty", data: null };
 		}
 
 		try {
 			const payload = JSON.parse(text);
-			return {
-				state: Number(payload.state ?? 0),
-				data: payload.data ?? null,
-			};
+			if (
+				payload &&
+				(payload.status === "restart" || payload.state === "restart")
+			) {
+				this.resetSession(
+					"The signaling server requested a restart. Re-run the role assignment flow.",
+				);
+			}
+			return payload;
 		} catch (error) {
 			console.warn(`Non-JSON response for ${action}:`, text);
-			return { state: 0, data: null };
+			return { status: "empty", data: null };
 		}
 	}
 
-	async getState() {
-		return this.fetchSignal("get");
+	// Clears local role/session state so the next handshake begins from a fresh assignment.
+	resetSession(message = "Resetting the current signaling session.") {
+		this.userId = null;
+		this.role = null;
+		this.handshakeState = "idle";
+		this.lastRoleResponse = null;
+		this.setStatus(message);
 	}
 
-	async setState(data) {
-		return this.fetchSignal("set", { data });
-	}
-
-	async setOffer(sdp) {
-		this.hasSentOffer = true;
-		this.hasSentAnswer = false;
-		this.signalingComplete = false;
-		this.pendingCandidates = [];
-		if (this.pendingCandidateTimer) {
-			clearTimeout(this.pendingCandidateTimer);
-			this.pendingCandidateTimer = null;
-		}
-		const result = await this.setState(sdp);
-		console.log("[SignalManager] Sending offer to signaling server:", result);
-		return result;
-	}
-
-	async setAnswer(sdp) {
-		this.hasSentAnswer = true;
-		this.signalingComplete = true;
-		this.stopPolling();
-		const result = await this.setState(sdp);
-		console.log("[SignalManager] Sending answer to signaling server:", result);
-		return result;
-	}
-
-	async runSignalStateMachine(webrtcManager, response = null) {
-		if (!webrtcManager) {
-			return null;
+	// Requests the role assignment from the signaling server for the current caller.
+	async getRole() {
+		const payload = await this.fetchSignal("getRole");
+		if (!payload || payload.status === "restart") {
+			return payload;
 		}
 
-		const currentResponse = response ?? (await this.getState());
-		const previousState = this.currentState ?? null;
-		const state = Number(currentResponse.state ?? 0);
-		const data = currentResponse.data;
-		this.currentState = state;
-
-		if (previousState !== state) {
-			console.log(
-				`[SignalManager] State changed: ${previousState ?? "unknown"} -> ${state}`,
-				{ data },
-			);
-			this.setStatus(
-				`Signal state changed: ${previousState ?? "unknown"} -> ${state}`,
-			);
-		}
-
-		if (state === 2 && this.hasSentOffer) {
-			this.setStatus("Offer sent. Waiting for the peer answer at state 3.");
-			return "wait";
-		}
-
-		if (state === 0) {
-			this.setStatus("No active handshake found. Creating an offer.");
-			return webrtcManager.createOffer();
-		}
-
-		if (state === 1 && data === "create offer") {
-			this.setStatus("Peer discovered. Creating an offer.");
-			return webrtcManager.createOffer();
-		}
-
-		if (state === 1 && data === "wait") {
-			return "wait";
-		}
-
-		if (state === 2 && data && data !== "accepted") {
-			if (this.hasSentOffer) {
-				this.setStatus("Offer sent. Waiting for the peer answer at state 3.");
-				return "wait";
-			}
-
-			this.setStatus("Offer received. Preparing automatic answer.");
-			return webrtcManager.handleIncomingOffer({ sdp: data, candidates: [] });
-		}
-
-		if (state === 3 && data && data !== "accepted") {
-			this.setStatus("Answer received. Completing peer connection.");
-			return webrtcManager.handleIncomingAnswer({
-				sdp: data,
-				candidates: [],
-			});
-		}
-
-		return "wait";
-	}
-
-	async autoNegotiate(webrtcManager) {
-		this.webrtcManager = webrtcManager ?? this.webrtcManager;
-		if (!this.webrtcManager) {
-			return null;
-		}
-
-		this.startPolling();
-		this.setStatus("Starting automatic negotiation");
-
-		try {
-			return await this.runSignalStateMachine(this.webrtcManager);
-		} catch (error) {
-			console.error("Automatic negotiation failed:", error);
-			this.setStatus(
-				"Automatic signaling setup failed. Check the server and browser console.",
-			);
-			return null;
-		}
-	}
-
-	/**
-	 * Clears the stored signaling handshake on the server after a successful
-	 * connection so the same server slot can be reused for a future call.
-	 * This intentionally does not reset the local live connection state.
-	 */
-	async clearAll() {
-		const result = await this.fetchSignal("clear");
-		console.log("[SignalManager] Clearing signaling state:", result);
-		return result;
-	}
-
-	async addCandidate(type, candidate) {
-		if (this.hasSentOffer || this.hasSentAnswer) {
-			console.log(
-				"[SignalManager] Ignoring ICE candidate update after offer/answer was already sent.",
-			);
-			return;
-		}
-
-		const candidateType = type.startsWith("Candidate")
-			? type
-			: `Candidate${type}`;
-		const value =
-			typeof candidate === "string" ? candidate : JSON.stringify(candidate);
-		const entry = { type: candidateType, value };
-		const alreadyQueued = this.pendingCandidates.some(
-			(item) => item.type === candidateType && item.value === value,
+		this.lastRoleResponse = payload;
+		this.userId = payload.userId ?? this.userId;
+		this.role = payload.role ?? this.role;
+		this.handshakeState = payload.state ?? this.handshakeState;
+		this.onRole({
+			userId: this.userId,
+			role: this.role,
+			state: this.handshakeState,
+			response: payload,
+		});
+		this.setStatus(
+			`Assigned signaling role ${this.role ?? "unknown"} for user ${this.userId ?? "?"}.`,
 		);
-
-		if (!alreadyQueued) {
-			this.pendingCandidates.push(entry);
-		}
-
-		if (this.pendingCandidateTimer) {
-			clearTimeout(this.pendingCandidateTimer);
-		}
-
-		this.pendingCandidateTimer = setTimeout(async () => {
-			const batch = [...this.pendingCandidates];
-			this.pendingCandidates = [];
-			this.pendingCandidateTimer = null;
-
-			if (!batch.length) {
-				return;
-			}
-
-			const payload = JSON.stringify({
-				type: "ice-candidates",
-				candidates: batch,
-			});
-
-			console.log(
-				"[SignalManager] Debounced ICE candidate update scheduled for delivery:",
-				batch,
-			);
-			await this.setState(payload);
-		}, this.candidateFlushDelayMs);
+		return payload;
 	}
 
-	async getOffer() {
-		const response = await this.getState();
-		const raw = response.data;
+	// Alias for the explicit role request flow in the docs.
+	async requestRole() {
+		return this.getRole();
+	}
+
+	// Sends the offer SDP to the server using the active userId.
+	async sendOffer(sdp, userId = this.userId) {
+		if (userId === null || userId === undefined) {
+			throw new Error("A valid userId is required before sending an offer.");
+		}
+		if (typeof sdp !== "string" || !sdp.trim()) {
+			throw new Error("Offer SDP must be a non-empty string.");
+		}
+		return this.fetchSignal("sendOffer", { userId, data: sdp });
+	}
+
+	// Sends one ICE candidate to the offerer role bucket on the server.
+	async sendOfferIceCandidate(candidate, userId = this.userId) {
+		const serialized =
+			typeof candidate === "string" ? candidate : JSON.stringify(candidate);
+		return this.fetchSignal("sendOfferICE", { userId, data: serialized });
+	}
+
+	// Sends the answer SDP to the server using the active userId.
+	async sendAnswer(sdp, userId = this.userId) {
+		if (userId === null || userId === undefined) {
+			throw new Error("A valid userId is required before sending an answer.");
+		}
+		if (typeof sdp !== "string" || !sdp.trim()) {
+			throw new Error("Answer SDP must be a non-empty string.");
+		}
+		return this.fetchSignal("sendAnswer", { userId, data: sdp });
+	}
+
+	// Sends one ICE candidate to the answerer role bucket on the server.
+	async sendAnswerIceCandidate(candidate, userId = this.userId) {
+		const serialized =
+			typeof candidate === "string" ? candidate : JSON.stringify(candidate);
+		return this.fetchSignal("sendAnswerICE", { userId, data: serialized });
+	}
+
+	// Returns the current offer payload for this user, if any is waiting in the server state.
+	async getOffer(userId = this.userId) {
+		if (userId === null || userId === undefined) {
+			return null;
+		}
+
+		const payload = await this.fetchSignal("getOffer", { userId });
+		if (!payload || payload.status === "restart") {
+			return null;
+		}
+
+		const sdp = payload.offerSdp ?? payload.data ?? payload.sdp ?? null;
 		if (
-			!raw ||
-			raw === "accepted" ||
-			raw === "create offer" ||
-			raw === "wait" ||
-			raw === "no-op" ||
-			raw === "cleared"
+			!sdp ||
+			sdp === "accepted" ||
+			sdp === "create offer" ||
+			sdp === "wait" ||
+			sdp === "no-op" ||
+			sdp === "cleared"
 		) {
 			return null;
 		}
-		if (response.state >= 2) {
-			return { sdp: raw };
-		}
-		return null;
+
+		return {
+			userId: payload.userId ?? userId,
+			sdp,
+			candidates: await this.getOfferIceCandidates(userId),
+		};
 	}
 
-	async getAnswer() {
-		const response = await this.getState();
-		const raw = response.data;
+	// Returns the current answer payload for this user, if any has been stored by the peer.
+	async getAnswer(userId = this.userId) {
+		if (userId === null || userId === undefined) {
+			return null;
+		}
+
+		const payload = await this.fetchSignal("getAnswer", { userId });
+		if (!payload || payload.status === "restart") {
+			return null;
+		}
+
+		const sdp = payload.answerSdp ?? payload.data ?? payload.sdp ?? null;
 		if (
-			!raw ||
-			raw === "accepted" ||
-			raw === "create offer" ||
-			raw === "wait" ||
-			raw === "no-op" ||
-			raw === "cleared"
+			!sdp ||
+			sdp === "accepted" ||
+			sdp === "create offer" ||
+			sdp === "wait" ||
+			sdp === "no-op" ||
+			sdp === "cleared"
 		) {
 			return null;
 		}
-		if (response.state >= 3) {
-			return { sdp: raw };
-		}
-		return null;
+
+		return {
+			userId: payload.userId ?? userId,
+			sdp,
+			candidates: await this.getAnswerIceCandidates(userId),
+		};
 	}
 
-	async getCandidates(type) {
-		const payload = await this.fetchSignal(`candidates${type}`);
-		const candidates = payload.candidates || [];
+	// Normalizes the candidate list returned by the server into a consistent array shape.
+	normalizeCandidateList(payload) {
+		const candidates = payload?.iceCandidates ?? payload?.candidates ?? [];
+		if (!Array.isArray(candidates)) {
+			return [];
+		}
+
 		return candidates.map((candidate) => {
 			if (typeof candidate === "string") {
 				try {
@@ -326,21 +232,130 @@ export class SignalManager {
 		});
 	}
 
-	async pollSignalingState() {
-		if (this.signalingComplete) {
-			this.stopPolling();
+	// Fetches pending ICE candidates stored for the offerer side.
+	async getOfferIceCandidates(userId = this.userId) {
+		if (userId === null || userId === undefined) {
+			return [];
+		}
+		const payload = await this.fetchSignal("getOfferICE", { userId });
+		if (!payload || payload.status === "restart") {
+			return [];
+		}
+		return this.normalizeCandidateList(payload);
+	}
+
+	// Fetches pending ICE candidates stored for the answerer side.
+	async getAnswerIceCandidates(userId = this.userId) {
+		if (userId === null || userId === undefined) {
+			return [];
+		}
+		const payload = await this.fetchSignal("getAnswerICE", { userId });
+		if (!payload || payload.status === "restart") {
+			return [];
+		}
+		return this.normalizeCandidateList(payload);
+	}
+
+	// Starts the polling loop that listens for server updates for the current role.
+	startPolling() {
+		if (this.pollTimer) {
 			return;
 		}
-		console.log("poll triggered");
+
+		this.setStatus("Starting role-based signaling polling.");
+		this.pollOnce();
+		this.pollTimer = setInterval(() => this.pollOnce(), this.pollIntervalMs);
+	}
+
+	// Stops the polling loop when the remote peer has been answered or the session is reset.
+	stopPolling() {
+		if (this.pollTimer) {
+			clearInterval(this.pollTimer);
+			this.pollTimer = null;
+		}
+		this.handshakeState = "idle";
+	}
+
+	// Polls the current role bucket for remote SDP and ICE traffic without touching WebRTC APIs.
+	async pollOnce() {
+		if (!this.userId || !this.role) {
+			return;
+		}
 
 		try {
-			const response = await this.getState();
-			await this.runSignalStateMachine(this.webrtcManager ?? null, response);
+			if (this.role === "answerer") {
+				const offer = await this.getOffer(this.userId);
+				if (offer && offer.sdp) {
+					this.onOffer({ sdp: offer.sdp, candidates: offer.candidates ?? [] });
+				}
+				const offerCandidates = await this.getOfferIceCandidates(this.userId);
+				for (const candidate of offerCandidates) {
+					this.onCandidate({ candidate });
+				}
+			}
+
+			if (this.role === "offerer") {
+				const answer = await this.getAnswer(this.userId);
+				if (answer && answer.sdp) {
+					this.onAnswer({
+						sdp: answer.sdp,
+						candidates: answer.candidates ?? [],
+					});
+				}
+				const answerCandidates = await this.getAnswerIceCandidates(this.userId);
+				for (const candidate of answerCandidates) {
+					this.onCandidate({ candidate });
+				}
+			}
 		} catch (error) {
-			console.warn("Failed to poll signaling state:", error);
+			console.warn("Failed to poll the role-based signaling state:", error);
 			this.setStatus(
-				"Unable to reach the signaling server. Check the URL and server status.",
+				"Unable to reach the signaling server. Check the URL and browser console.",
 			);
 		}
+	}
+
+	// Runs the role assignment flow and then delegates the transport work back to the caller.
+	async beginHandshake(callbacks = {}) {
+		const {
+			onCreateOffer,
+			onRemoteOffer = this.onOffer,
+			onRemoteAnswer = this.onAnswer,
+			onRemoteCandidate = this.onCandidate,
+		} = callbacks;
+
+		const roleResponse = await this.getRole();
+		if (!roleResponse || roleResponse.status === "restart") {
+			return null;
+		}
+
+		this.onOffer = onRemoteOffer;
+		this.onAnswer = onRemoteAnswer;
+		this.onCandidate = onRemoteCandidate;
+
+		if (this.role === "offerer" && typeof onCreateOffer === "function") {
+			const offerPayload = await onCreateOffer();
+			if (offerPayload && offerPayload.sdp) {
+				await this.sendOffer(offerPayload.sdp, this.userId);
+				for (const candidate of offerPayload.candidates ?? []) {
+					await this.sendOfferIceCandidate(candidate, this.userId);
+				}
+			}
+		}
+
+		this.startPolling();
+		return roleResponse;
+	}
+
+	// Clears all signaling state using the server-side reset endpoint.
+	async clearServer() {
+		const result = await this.fetchSignal("clearServer");
+		console.log("[SignalManager] Clearing signaling state:", result);
+		return result;
+	}
+
+	// Backward-compatible alias for older call sites.
+	async clearAll() {
+		return this.clearServer();
 	}
 }
