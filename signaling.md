@@ -264,3 +264,287 @@ const result = await response.json();
 - Any invalid `userId` or restart signal means all clients must re-enter the role-assignment flow.
 - The server tracks client role and state by `userId`, which keeps the signaling flow explicit and easy to reason about.
 - When a valid client calls `get offer ICE` or `get answer ICE`, the server clears that candidate list after returning it so polling does not repeat the same ICE candidates.
+
+# Server code
+
+```javascript
+// WebRTC signaling server for Apps Script (GET-only)
+
+// ---- Storage helpers ----
+
+function getState_() {
+	const props = PropertiesService.getScriptProperties();
+	const raw = props.getProperty("signalingState");
+	if (!raw) {
+		return {
+			userIdCounter: 1,
+			offererId: null,
+			answererId: null,
+			offerSdp: null,
+			answerSdp: null,
+			offerIceCandidates: [],
+			answerIceCandidates: [],
+		};
+	}
+	try {
+		return JSON.parse(raw);
+	} catch (e) {
+		return {
+			userIdCounter: 1,
+			offererId: null,
+			answererId: null,
+			offerSdp: null,
+			answerSdp: null,
+			offerIceCandidates: [],
+			answerIceCandidates: [],
+		};
+	}
+}
+
+function saveState_(state) {
+	const props = PropertiesService.getScriptProperties();
+	props.setProperty("signalingState", JSON.stringify(state));
+}
+
+function clearState_() {
+	const props = PropertiesService.getScriptProperties();
+	props.deleteProperty("signalingState");
+}
+
+// ---- Utility ----
+
+function jsonResponse_(obj) {
+	return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
+		ContentService.MimeType.JSON,
+	);
+}
+
+function parseIntSafe_(value) {
+	const n = parseInt(value, 10);
+	return Number.isNaN(n) ? null : n;
+}
+
+function isValidUser_(state, userId) {
+	return (
+		userId !== null &&
+		(userId === state.offererId || userId === state.answererId)
+	);
+}
+
+// ---- Main entry ----
+
+function doGet(e) {
+	const action = (e.parameter.action || "").trim();
+	const state = getState_();
+
+	switch (action) {
+		case "getRole":
+			return handleGetRole_(state);
+
+		case "sendOffer":
+			return handleSendOffer_(state, e);
+
+		case "getOffer":
+			return handleGetOffer_(state, e);
+
+		case "sendOfferIce":
+		case "sendOfferICE":
+			return handleSendOfferIce_(state, e);
+
+		case "getOfferIce":
+		case "getOfferICE":
+			return handleGetOfferIce_(state, e);
+
+		case "sendAnswer":
+			return handleSendAnswer_(state, e);
+
+		case "getAnswer":
+			return handleGetAnswer_(state, e);
+
+		case "sendAnswerIce":
+		case "sendAnswerICE":
+			return handleSendAnswerIce_(state, e);
+
+		case "getAnswerIce":
+		case "getAnswerICE":
+			return handleGetAnswerIce_(state, e);
+
+		case "clearServer":
+			return handleClearServer_();
+
+		default:
+			return jsonResponse_({ status: "unknownAction" });
+	}
+}
+
+// ---- Handlers ----
+
+function handleGetRole_(state) {
+	// No active session yet: first client becomes offerer
+	if (!state.offererId && !state.answererId) {
+		const userId = state.userIdCounter;
+		state.offererId = userId;
+		state.userIdCounter = nextUserId_(state.userIdCounter);
+		saveState_(state);
+		return jsonResponse_({
+			userId,
+			role: "offerer",
+			state: "waitingForOffer",
+		});
+	}
+
+	// Offerer exists but no answerer yet: second client becomes answerer
+	if (state.offererId && !state.answererId) {
+		const userId = state.userIdCounter;
+		state.answererId = userId;
+		state.userIdCounter = nextUserId_(state.userIdCounter);
+		saveState_(state);
+		return jsonResponse_({
+			userId,
+			role: "answerer",
+			state: "waitingForAnswer",
+		});
+	}
+
+	// Session already full: clear and restart, third client becomes new offerer
+	clearState_();
+	const newState = getState_();
+	const userId = newState.userIdCounter;
+	newState.offererId = userId;
+	newState.userIdCounter = nextUserId_(newState.userIdCounter);
+	saveState_(newState);
+	return jsonResponse_({
+		userId,
+		role: "offerer",
+		state: "waitingForOffer",
+	});
+}
+
+function nextUserId_(current) {
+	const next = current + 1;
+	return next > 100 ? 1 : next;
+}
+
+function handleSendOffer_(state, e) {
+	const userId = parseIntSafe_(e.parameter.userId);
+	if (!isValidUser_(state, userId) || userId !== state.offererId) {
+		return jsonResponse_({ status: "restart" });
+	}
+
+	const offerSdp = e.parameter.data || "";
+	state.offerSdp = offerSdp;
+	saveState_(state);
+	return jsonResponse_({ status: "accepted" });
+}
+
+function handleGetOffer_(state, e) {
+	const userId = parseIntSafe_(e.parameter.userId);
+	if (!isValidUser_(state, userId) || userId !== state.answererId) {
+		return jsonResponse_({ status: "restart" });
+	}
+
+	if (!state.offerSdp) {
+		return jsonResponse_({ userId, offerSdp: null });
+	}
+
+	return jsonResponse_({ userId, offerSdp: state.offerSdp });
+}
+
+function handleSendOfferIce_(state, e) {
+	const userId = parseIntSafe_(e.parameter.userId);
+	if (!isValidUser_(state, userId) || userId !== state.offererId) {
+		return jsonResponse_({ status: "restart" });
+	}
+
+	const candidate = e.parameter.data || e.parameter.iceCandidate || "";
+	if (!Array.isArray(state.offerIceCandidates)) {
+		state.offerIceCandidates = [];
+	}
+	if (candidate) {
+		state.offerIceCandidates.push(candidate);
+	}
+	saveState_(state);
+	return jsonResponse_({ status: "accepted" });
+}
+
+function handleGetOfferIce_(state, e) {
+	const userId = parseIntSafe_(e.parameter.userId);
+	if (!isValidUser_(state, userId) || userId !== state.answererId) {
+		return jsonResponse_({ status: "restart" });
+	}
+
+	const candidates = Array.isArray(state.offerIceCandidates)
+		? state.offerIceCandidates.slice()
+		: [];
+
+	// Clear after returning so polling doesn’t repeat the same ICE candidates
+	state.offerIceCandidates = [];
+	saveState_(state);
+
+	return jsonResponse_({ userId, iceCandidates: candidates });
+}
+
+function handleSendAnswer_(state, e) {
+	const userId = parseIntSafe_(e.parameter.userId);
+	if (!isValidUser_(state, userId) || userId !== state.answererId) {
+		return jsonResponse_({ status: "restart" });
+	}
+
+	const answerSdp = e.parameter.data || "";
+	state.answerSdp = answerSdp;
+	saveState_(state);
+	return jsonResponse_({ status: "accepted" });
+}
+
+function handleGetAnswer_(state, e) {
+	const userId = parseIntSafe_(e.parameter.userId);
+	if (!isValidUser_(state, userId) || userId !== state.offererId) {
+		return jsonResponse_({ status: "restart" });
+	}
+
+	if (!state.answerSdp) {
+		return jsonResponse_({ userId, answerSdp: null });
+	}
+
+	return jsonResponse_({ userId, answerSdp: state.answerSdp });
+}
+
+function handleSendAnswerIce_(state, e) {
+	const userId = parseIntSafe_(e.parameter.userId);
+	if (!isValidUser_(state, userId) || userId !== state.answererId) {
+		return jsonResponse_({ status: "restart" });
+	}
+
+	const candidate = e.parameter.data || e.parameter.iceCandidate || "";
+	if (!Array.isArray(state.answerIceCandidates)) {
+		state.answerIceCandidates = [];
+	}
+	if (candidate) {
+		state.answerIceCandidates.push(candidate);
+	}
+	saveState_(state);
+	return jsonResponse_({ status: "accepted" });
+}
+
+function handleGetAnswerIce_(state, e) {
+	const userId = parseIntSafe_(e.parameter.userId);
+	if (!isValidUser_(state, userId) || userId !== state.offererId) {
+		return jsonResponse_({ status: "restart" });
+	}
+
+	const candidates = Array.isArray(state.answerIceCandidates)
+		? state.answerIceCandidates.slice()
+		: [];
+
+	// Clear after returning so polling doesn’t repeat the same ICE candidates
+	state.answerIceCandidates = [];
+	saveState_(state);
+
+	return jsonResponse_({ userId, iceCandidates: candidates });
+}
+
+function handleClearServer_() {
+	clearState_();
+	return jsonResponse_({ status: "cleared" });
+}
+```

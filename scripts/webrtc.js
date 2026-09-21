@@ -20,7 +20,6 @@ export class WebRTCManager {
 		this.audioContext = null;
 		this.offerIceCandidates = [];
 		this.answerIceCandidates = [];
-		this.connectionStage = "idle";
 	}
 
 	// Keeps the WebRTC manager independent from the signaling state machine.
@@ -40,55 +39,33 @@ export class WebRTCManager {
 		console.log(prefix, message);
 	}
 
-	// Records the current connection stage so callers can reason about the peer lifecycle.
-	updateConnectionStage(stage, message) {
-		this.connectionStage = stage;
-		this.logDebug(`Connection stage: ${stage}`, message || "");
-		if (message) {
-			this.setStatus(message);
-		}
-	}
-
 	// Creates a single RTCPeerConnection and installs the data-channel callbacks.
 	createPeerConnection() {
 		if (this.peer) {
 			return this.peer;
 		}
 
-		this.updateConnectionStage(
-			"peer-creating",
-			"Creating WebRTC peer connection.",
-		);
+		this.setStatus("Creating WebRTC peer connection.");
 		const peer = new RTCPeerConnection(config);
 		this.peer = peer;
 
 		peer.onsignalingstatechange = () => {
 			this.logDebug("Peer signaling state changed", peer.signalingState);
 			if (peer.signalingState === "stable") {
-				this.updateConnectionStage(
-					"signaling-stable",
-					"Peer connection signaling is stable.",
-				);
+				this.setStatus("Peer connection signaling is stable.");
 			}
 		};
 
 		peer.oniceconnectionstatechange = () => {
 			this.logDebug("ICE connection state changed", peer.iceConnectionState);
 			if (peer.iceConnectionState === "checking") {
-				this.updateConnectionStage(
-					"ice-checking",
-					"Checking ICE connectivity.",
-				);
+				this.setStatus("Checking ICE connectivity.");
 			}
 			if (peer.iceConnectionState === "connected") {
-				this.updateConnectionStage(
-					"ice-connected",
-					"ICE connected. Peer-to-peer networking is ready.",
-				);
+				this.setStatus("ICE connected. Peer-to-peer networking is ready.");
 			}
 			if (peer.iceConnectionState === "failed") {
-				this.updateConnectionStage(
-					"ice-failed",
+				this.setStatus(
 					"ICE connection failed. Check the TURN/STUN server and credentials.",
 				);
 			}
@@ -98,19 +75,17 @@ export class WebRTCManager {
 			const { connectionState } = peer;
 			this.logDebug("Peer connection state changed", connectionState);
 			if (connectionState === "connected") {
-				this.updateConnectionStage(
-					"connected",
+				this.setStatus(
 					"WebRTC connection established. VAD snippets can now flow.",
 				);
 			}
 			if (connectionState === "failed") {
-				this.updateConnectionStage(
-					"failed",
+				this.setStatus(
 					"Connection failed. Try generating a fresh offer and answer pair.",
 				);
 			}
 			if (connectionState === "disconnected") {
-				this.updateConnectionStage("disconnected", "Connection disconnected.");
+				this.setStatus("Connection disconnected.");
 			}
 		};
 

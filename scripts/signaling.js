@@ -125,6 +125,11 @@ export class SignalManager {
 		if (typeof sdp !== "string" || !sdp.trim()) {
 			throw new Error("Offer SDP must be a non-empty string.");
 		}
+		console.log("[SignalManager] Sending offer to server", {
+			userId,
+			length: sdp.length,
+			sdpPreview: sdp.slice(0, 180),
+		});
 		return this.fetchSignal("sendOffer", { userId, data: sdp });
 	}
 
@@ -132,6 +137,10 @@ export class SignalManager {
 	async sendOfferIceCandidate(candidate, userId = this.userId) {
 		const serialized =
 			typeof candidate === "string" ? candidate : JSON.stringify(candidate);
+		console.log("[SignalManager] Sending offer ICE candidate to server", {
+			userId,
+			candidate: serialized,
+		});
 		return this.fetchSignal("sendOfferICE", { userId, data: serialized });
 	}
 
@@ -143,6 +152,11 @@ export class SignalManager {
 		if (typeof sdp !== "string" || !sdp.trim()) {
 			throw new Error("Answer SDP must be a non-empty string.");
 		}
+		console.log("[SignalManager] Sending answer to server", {
+			userId,
+			length: sdp.length,
+			sdpPreview: sdp.slice(0, 180),
+		});
 		return this.fetchSignal("sendAnswer", { userId, data: sdp });
 	}
 
@@ -150,6 +164,10 @@ export class SignalManager {
 	async sendAnswerIceCandidate(candidate, userId = this.userId) {
 		const serialized =
 			typeof candidate === "string" ? candidate : JSON.stringify(candidate);
+		console.log("[SignalManager] Sending answer ICE candidate to server", {
+			userId,
+			candidate: serialized,
+		});
 		return this.fetchSignal("sendAnswerICE", { userId, data: serialized });
 	}
 
