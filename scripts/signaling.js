@@ -164,6 +164,11 @@ export class SignalManager {
 		}
 
 		if (state === 2 && data && data !== "accepted") {
+			if (this.hasSentOffer) {
+				this.setStatus("Offer sent. Waiting for the peer answer at state 3.");
+				return "wait";
+			}
+
 			this.setStatus("Offer received. Preparing automatic answer.");
 			return webrtcManager.handleIncomingOffer({ sdp: data, candidates: [] });
 		}
