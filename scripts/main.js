@@ -19,9 +19,54 @@ const offerInput = document.getElementById("offerInput");
 const answerInput = document.getElementById("answerInput");
 const statusLog = document.getElementById("statusLog");
 const remoteAudio = document.getElementById("remoteAudio");
+const activeUsersList = document.getElementById("activeUsersList");
 
 function setStatus(message) {
 	statusLog.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
+}
+
+/**
+ * Render the list of active peers in the UI.
+ *
+ * This is intentionally left unconnected to the signaling flow for now,
+ * so the UI can be styled and populated manually in a later step.
+ *
+ * @param {string[]} users - The usernames to display in the peer list.
+ */
+function populateUserList(users = []) {
+	if (!activeUsersList) {
+		return;
+	}
+
+	activeUsersList.innerHTML = "";
+
+	if (!users.length) {
+		activeUsersList.innerHTML =
+			'<p class="empty-state">No active peers yet.</p>';
+		return;
+	}
+
+	const list = document.createElement("ul");
+	list.className = "user-list";
+
+	users.forEach((username) => {
+		const item = document.createElement("li");
+		item.className = "user-item";
+
+		const name = document.createElement("span");
+		name.className = "user-name";
+		name.textContent = username;
+
+		const callButton = document.createElement("button");
+		callButton.type = "button";
+		callButton.className = "secondary call-user-btn";
+		callButton.textContent = "Call";
+
+		item.append(name, callButton);
+		list.appendChild(item);
+	});
+
+	activeUsersList.appendChild(list);
 }
 
 function ensureManagers() {
@@ -69,8 +114,21 @@ function ensureManagers() {
 	if (!state.signal) {
 		state.signal = new SignalingManager({
 			onStatus: setStatus,
+			onUserUpdate: (users) => {
+				populateUserList(users);
+			},
 			onAnswer: async (answer) => {
-				answerInput.value = answer;
+				// Trim any leading or trailing whitespace from the received answer token.
+				const trimmedAnswer = answer.trim();
+
+				//hand over to web rtc
+				state.webrtc.processIncomingToken(trimmedAnswer);
+
+				// also display the answer
+				// answerInput.value = trimmedAnswer
+			},
+			onRestart: () => {
+				setStatus("Signaling server requested a restart.");
 			},
 		});
 	}

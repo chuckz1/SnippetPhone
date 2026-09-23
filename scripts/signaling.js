@@ -10,7 +10,7 @@ const serverURL =
 export class SignalingManager {
 	constructor({
 		onStatus = () => {},
-		onUserUpdate = () => {},
+		onUserUpdate = (users) => {},
 		onAnswer = () => {},
 		onRestart = () => {},
 	} = {}) {
