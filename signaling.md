@@ -306,7 +306,7 @@ function saveState_(state) {
 	props.setProperty("signalingState", JSON.stringify(state));
 }
 
-function clearState_() {
+function clearState() {
 	const props = PropertiesService.getScriptProperties();
 	props.deleteProperty("signalingState");
 }
@@ -407,7 +407,7 @@ function handleGetRole_(state) {
 	}
 
 	// Session already full: clear and restart, third client becomes new offerer
-	clearState_();
+	clearState();
 	const newState = getState_();
 	const userId = newState.userIdCounter;
 	newState.offererId = userId;
@@ -544,7 +544,7 @@ function handleGetAnswerIce_(state, e) {
 }
 
 function handleClearServer_() {
-	clearState_();
+	clearState();
 	return jsonResponse_({ status: "cleared" });
 }
 ```

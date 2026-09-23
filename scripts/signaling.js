@@ -194,6 +194,11 @@ export class SignalManager {
 			return null;
 		}
 
+		console.log("[SignalManager] Poll received offer from server", {
+			userId,
+			length: sdp.length,
+			sdpPreview: sdp.slice(0, 180),
+		});
 		return {
 			userId: payload.userId ?? userId,
 			sdp,
@@ -224,6 +229,11 @@ export class SignalManager {
 			return null;
 		}
 
+		console.log("[SignalManager] Poll received answer from server", {
+			userId,
+			length: sdp.length,
+			sdpPreview: sdp.slice(0, 180),
+		});
 		return {
 			userId: payload.userId ?? userId,
 			sdp,
@@ -259,7 +269,18 @@ export class SignalManager {
 		if (!payload || payload.status === "restart") {
 			return [];
 		}
-		return this.normalizeCandidateList(payload);
+		const candidates = this.normalizeCandidateList(payload);
+		if (candidates.length) {
+			console.log(
+				"[SignalManager] Poll received offer ICE candidates from server",
+				{
+					userId,
+					count: candidates.length,
+					candidates,
+				},
+			);
+		}
+		return candidates;
 	}
 
 	// Fetches pending ICE candidates stored for the answerer side.
@@ -271,7 +292,18 @@ export class SignalManager {
 		if (!payload || payload.status === "restart") {
 			return [];
 		}
-		return this.normalizeCandidateList(payload);
+		const candidates = this.normalizeCandidateList(payload);
+		if (candidates.length) {
+			console.log(
+				"[SignalManager] Poll received answer ICE candidates from server",
+				{
+					userId,
+					count: candidates.length,
+					candidates,
+				},
+			);
+		}
+		return candidates;
 	}
 
 	// Starts the polling loop that listens for server updates for the current role.
