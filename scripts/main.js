@@ -1,11 +1,14 @@
 import { WebRTCManager } from "./webrtc.js";
 import { VADManager } from "./vad.js";
+import { SignalingManager } from "./signaling.js";
 
 const state = {
 	webrtc: null,
 	vad: null,
+	signal: null,
 };
 
+// DOM elements for user interaction and status display.
 const startMicBtn = document.getElementById("startMicBtn");
 const createOfferBtn = document.getElementById("createOfferBtn");
 const copyOfferBtn = document.getElementById("copyOfferBtn");
@@ -62,7 +65,18 @@ function ensureManagers() {
 			},
 		});
 	}
+
+	if (!state.signal) {
+		state.signal = new SignalingManager({
+			onStatus: setStatus,
+			onAnswer: async (answer) => {
+				answerInput.value = answer;
+			},
+		});
+	}
 }
+
+//#region Event Listeners
 
 async function startMicrophone() {
 	ensureManagers();
@@ -154,6 +168,7 @@ copyAnswerBtn.addEventListener("click", async () => {
 completeCallBtn.addEventListener("click", async () => {
 	await completeOfferWithAnswer();
 });
+//#endregion
 
 setStatus(
 	"Ready to start a call. Generate an offer, copy it, transfer it manually, then complete the call with the answer token.",
@@ -167,7 +182,10 @@ async function initializeVAD() {
 		return;
 	}
 
+	// make sure all managers are initialized before proceeding.
 	ensureManagers();
+
+	// Initialize the VAD (Voice Activity Detection) system.
 	try {
 		await state.vad.initVAD();
 		setStatus(
@@ -177,6 +195,30 @@ async function initializeVAD() {
 		console.error(error);
 		setStatus(
 			"The VAD library could not initialize. Check the browser console for details.",
+		);
+	}
+
+	// Initialize the webrtc manager as well.
+	try {
+		await state.webrtc.initWebRTC();
+		setStatus(
+			"WebRTC manager is ready. You can now send offer to the signaling server.",
+		);
+	} catch (error) {
+		console.error(error);
+		setStatus(
+			"The WebRTC manager could not initialize. Check the browser console for details.",
+		);
+	}
+
+	// Initialize the signaling manager if it hasn't been already.
+	try {
+		await state.signal.init(state.webrtc.generatedOfferToken);
+		setStatus("Signaling manager is ready. You can now start a call.");
+	} catch (error) {
+		console.error(error);
+		setStatus(
+			"The signaling manager could not initialize. Check the browser console for details.",
 		);
 	}
 }

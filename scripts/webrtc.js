@@ -28,6 +28,15 @@ export class WebRTCManager {
 		this.onStatus(message);
 	}
 
+	initWebRTC() {
+		if (!this.peer) {
+			this.createPeerConnection();
+		}
+
+		// Generate an offer token after ensuring the peer connection exists.
+		this.generateOfferToken();
+	}
+
 	createPeerConnection() {
 		if (this.peer) {
 			return this.peer;
