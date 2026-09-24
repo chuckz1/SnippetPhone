@@ -28,13 +28,13 @@ export class WebRTCManager {
 		this.onStatus(message);
 	}
 
-	initWebRTC() {
+	async initWebRTC() {
 		if (!this.peer) {
 			this.createPeerConnection();
 		}
 
 		// Generate an offer token after ensuring the peer connection exists.
-		this.generateOfferToken();
+		await this.generateOfferToken();
 	}
 
 	createPeerConnection() {
@@ -297,6 +297,8 @@ export class WebRTCManager {
 		if (!tokenText) {
 			this.setStatus("Paste the answer token before completing the call.");
 			return;
+		} else {
+			console.log("token text: ", tokenText);
 		}
 
 		let token;

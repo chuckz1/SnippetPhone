@@ -11,14 +11,17 @@ export class SignalingManager {
 	constructor({
 		onStatus = () => {},
 		onUserUpdate = (users) => {},
-		onAnswer = () => {},
+		getAnswerToken = (offer) => {},
+		onAnswer = (answer) => {},
 		onRestart = () => {},
 	} = {}) {
 		this.onStatus = onStatus;
 		this.onUserUpdate = onUserUpdate;
+		this.getAnswerToken = getAnswerToken;
 		this.onAnswer = onAnswer;
 		this.onRestart = onRestart;
 		this.userName = "";
+		this.targetUser = "";
 		this.activeUsers = [];
 		this.pollingHandle = null;
 	}
@@ -61,7 +64,7 @@ export class SignalingManager {
 				this.onRestart();
 				return false;
 				break;
-			case data?.answer !== undefined:
+			case data?.answer !== undefined && data?.answer !== null:
 				// Server returned an answer payload.
 				this.onAnswer(data.answer);
 				return false;
@@ -73,6 +76,9 @@ export class SignalingManager {
 				return true;
 				break;
 			default:
+				// Server returned an unexpected payload.
+				console.warn("Unexpected response from server:", data);
+				this.setStatus("Unexpected response from server.");
 				break;
 		}
 		return false;
@@ -96,7 +102,8 @@ export class SignalingManager {
 		}
 
 		const params = new URLSearchParams({
-			action: "init",
+			action: "ping",
+			username: this.userName,
 			offer: offerToken,
 		});
 		const url = `${serverURL}?${params.toString()}`;
@@ -111,12 +118,114 @@ export class SignalingManager {
 
 			const setup = await this.handlePingResponse(response);
 			if (setup) {
+				console.log("starting polling.");
 				//start polling after successful setup
 				this.startPolling();
 			}
 		} catch (error) {
 			console.error("Error initializing signaling server:", error);
 			this.setStatus("Unable to reach the signaling server during init.");
+		}
+	}
+
+	async handleOfferResponse(response) {
+		const offer = await response.text();
+
+		console.log("offer received: ", offer);
+
+		if (!response.ok) {
+			throw new Error(`Offer get failed (${response.status})`);
+		}
+
+		// get answer
+		const answerToken = await this.getAnswerToken(offer);
+
+		// send the answer back to the signaling server
+		this._sendAnswer(this.targetUser, answerToken);
+
+		return false;
+	}
+
+	async requestOffer(targetUser) {
+		if (!this.userName) {
+			console.warn("requestOffer called without a username.");
+			return;
+		}
+
+		if (!targetUser) {
+			console.warn("requestOffer called without a target user.");
+			return;
+		}
+
+		// save for later
+		this.targetUser = targetUser;
+
+		const params = new URLSearchParams({
+			action: "getOffer",
+			username: this.userName,
+			target: targetUser,
+		});
+		const url = `${serverURL}?${params.toString()}`;
+
+		try {
+			const response = await fetch(url, {
+				method: "GET",
+				headers: {
+					Accept: "application/json",
+				},
+			});
+			await this.handleOfferResponse(response);
+		} catch (error) {
+			console.error("Error requesting offer from server:", error);
+			this.setStatus(
+				"Unable to reach the signaling server when requesting offer.",
+			);
+		}
+	}
+
+	async _sendAnswer(targetUser, answerToken) {
+		if (!answerToken) {
+			console.warn("sendAnswer called without an answer token.");
+			return;
+		}
+
+		if (!targetUser) {
+			console.warn("sendAnswer called without a target user.");
+			return;
+		}
+
+		if (!this.userName) {
+			console.warn("sendAnswer called without a username.");
+			return;
+		}
+
+		const params = new URLSearchParams({
+			action: "sendAnswer",
+			username: this.userName,
+			target: targetUser,
+			answer: answerToken,
+		});
+		const url = `${serverURL}?${params.toString()}`;
+
+		try {
+			const response = await fetch(url, {
+				method: "GET",
+				headers: {
+					Accept: "application/json",
+				},
+			});
+
+			//just check for response string to contain "ok"
+			await response.text().then((text) => {
+				if (!text.toLowerCase().includes("ok")) {
+					throw new Error(`Unexpected response from server: ${text}`);
+				}
+			});
+		} catch (error) {
+			console.error("Error sending answer to server:", error);
+			this.setStatus(
+				"Unable to reach the signaling server when sending answer.",
+			);
 		}
 	}
 

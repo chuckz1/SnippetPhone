@@ -20,6 +20,7 @@ const answerInput = document.getElementById("answerInput");
 const statusLog = document.getElementById("statusLog");
 const remoteAudio = document.getElementById("remoteAudio");
 const activeUsersList = document.getElementById("activeUsersList");
+const currentUserName = document.getElementById("currentUserName");
 
 function setStatus(message) {
 	statusLog.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
@@ -61,6 +62,11 @@ function populateUserList(users = []) {
 		callButton.type = "button";
 		callButton.className = "secondary call-user-btn";
 		callButton.textContent = "Call";
+		callButton.addEventListener("click", () => {
+			setStatus(`Calling user: ${username}`);
+			// Send an answer to the signaling server for this user.
+			sendAnswerToServer(username);
+		});
 
 		item.append(name, callButton);
 		list.appendChild(item);
@@ -117,15 +123,13 @@ function ensureManagers() {
 			onUserUpdate: (users) => {
 				populateUserList(users);
 			},
+			getAnswerToken: (offer) => {
+				offerInput.value = offer;
+				return processIncomingToken();
+			},
 			onAnswer: async (answer) => {
-				// Trim any leading or trailing whitespace from the received answer token.
-				const trimmedAnswer = answer.trim();
-
-				//hand over to web rtc
-				state.webrtc.processIncomingToken(trimmedAnswer);
-
-				// also display the answer
-				// answerInput.value = trimmedAnswer
+				answerInput.value = answer;
+				completeOfferWithAnswer();
 			},
 			onRestart: () => {
 				setStatus("Signaling server requested a restart.");
@@ -203,6 +207,11 @@ async function copyGeneratedAnswer() {
 	await copyToClipboard(state.webrtc.generatedAnswerToken);
 }
 
+async function sendAnswerToServer(targetUser) {
+	ensureManagers();
+	await state.signal.requestOffer(targetUser);
+}
+
 startMicBtn.addEventListener("click", async () => {
 	await startMicrophone();
 });
@@ -275,8 +284,9 @@ async function initializeVAD() {
 		setStatus("Username is required to proceed.");
 		return;
 	}
-
 	state.signal.setUsername(userName);
+	currentUserName.textContent = userName;
+
 	// Initialize the signaling manager if it hasn't been already.
 	try {
 		await state.signal.init(state.webrtc.generatedOfferToken);
