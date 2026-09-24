@@ -1,3 +1,5 @@
+import { use } from "react";
+
 const serverURL =
 	"https://script.google.com/macros/s/AKfycbzrDW6pei-ZNnki1AdPZBVxg3WbckDUhAphOHN2NbNgpUSHlvCkAwg7c53YXDreVesQhg/exec";
 
@@ -87,6 +89,11 @@ export class SignalingManager {
 		//send first ping with the offer token to the signaling server.
 		if (!offerToken) {
 			console.warn("init called without an offer token.");
+			return;
+		}
+
+		if (!this.userName) {
+			console.warn("init called without a username.");
 			return;
 		}
 

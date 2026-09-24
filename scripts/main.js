@@ -269,6 +269,14 @@ async function initializeVAD() {
 		);
 	}
 
+	// prompt user for username
+	const userName = prompt("Enter your username:");
+	if (!userName) {
+		setStatus("Username is required to proceed.");
+		return;
+	}
+
+	state.signal.setUsername(userName);
 	// Initialize the signaling manager if it hasn't been already.
 	try {
 		await state.signal.init(state.webrtc.generatedOfferToken);
