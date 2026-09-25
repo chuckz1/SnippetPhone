@@ -119,10 +119,6 @@ export class SignalingManager {
 			}
 		}
 
-		if (!response.ok) {
-			throw new Error(`Ping failed (${response.status})`);
-		}
-
 		switch (true) {
 			case data === "bad":
 				// Server reported the request was invalid.
@@ -193,17 +189,13 @@ export class SignalingManager {
 
 		console.log("offer received: ", offer);
 
-		if (!response.ok) {
-			throw new Error(`Offer get failed (${response.status})`);
-		}
-
 		// get answer
 		const answerToken = await this.getAnswerToken(offer);
 
 		// send the answer back to the signaling server
 		this._sendAnswer(this.targetUser, answerToken);
 
-		return false;
+		return true;
 	}
 
 	async requestOffer(targetUser) {
