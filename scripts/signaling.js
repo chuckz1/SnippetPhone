@@ -1,5 +1,7 @@
 const serverURL =
 	"https://script.google.com/macros/s/AKfycbzrDW6pei-ZNnki1AdPZBVxg3WbckDUhAphOHN2NbNgpUSHlvCkAwg7c53YXDreVesQhg/exec";
+const serverRetryInterval = 5000; // Retry interval in milliseconds if the server is unreachable.
+const serverRetryCount = 3; // Number of times to retry if the server is unreachable.
 
 /**
  * Basic signaling manager scaffold.
@@ -24,6 +26,7 @@ export class SignalingManager {
 		this.targetUser = "";
 		this.activeUsers = [];
 		this.pollingHandle = null;
+		this.loggedIn = false;
 	}
 
 	/**
@@ -33,6 +36,69 @@ export class SignalingManager {
 	 */
 	setStatus(message) {
 		this.onStatus(message);
+	}
+
+	/**
+	 * Send a message to the signaling server.
+	 * Handles ensuring the message is properly sent to the server.
+	 * and retrying if necessary.
+	 *
+	 * @param {URLSearchParams} params - The parameters to send to the server.
+	 * @param {function} responseCallback - Optional callback to handle the server response. This is expected to return true if the response was successfully handled, false otherwise.
+	 */
+	async _sendSeverMessage(
+		params,
+		responseCallback,
+		errorMessage = "Unable to reach the signaling server.",
+	) {
+		const url = `${serverURL}?${params.toString()}`;
+		let lastError = null;
+
+		for (let attempt = 1; attempt <= serverRetryCount; attempt++) {
+			try {
+				const response = await fetch(url, {
+					method: "GET",
+					headers: {
+						Accept: "application/json",
+					},
+				});
+
+				if (!response.ok) {
+					throw new Error(`Server responded with status ${response.status}`);
+				}
+
+				if (responseCallback) {
+					const handled = await responseCallback.call(this, response);
+					if (!handled) {
+						throw new Error("Server response was not handled successfully.");
+					}
+				}
+
+				return;
+			} catch (error) {
+				lastError = error;
+				console.error(
+					`Error sending message to server (attempt ${attempt}/${serverRetryCount}):`,
+					error,
+				);
+				this.setStatus(errorMessage);
+
+				if (attempt < serverRetryCount) {
+					await new Promise((resolve) => {
+						window.setTimeout(resolve, serverRetryInterval);
+					});
+				}
+			}
+		}
+
+		console.error("Error sending message to server after retries:", lastError);
+		this.setStatus(errorMessage);
+
+		//wait one more retry interval before calling restart
+		await new Promise((resolve) => {
+			window.setTimeout(resolve, serverRetryInterval);
+		});
+		this.onRestart();
 	}
 
 	/**
@@ -62,26 +128,33 @@ export class SignalingManager {
 				// Server reported the request was invalid.
 				this.setStatus("Server reported a bad request. Restarting...");
 				this.onRestart();
-				return false;
 				break;
 			case data?.answer !== undefined && data?.answer !== null:
 				// Server returned an answer payload.
 				this.onAnswer(data.answer);
-				return false;
 				break;
 			case Array.isArray(data?.users):
 				// Server returned the standard ping payload with a users array.
 				this.activeUsers = data.users;
+
+				// remove ourself from the list of active users
+				this.activeUsers = this.activeUsers.filter(
+					(user) => user !== this.userName,
+				);
+				console.log("Active users after removing self:", this.activeUsers);
+
 				this.onUserUpdate(this.activeUsers);
-				return true;
+				// Restart polling after updating the users list.
+				this.startPolling();
 				break;
 			default:
 				// Server returned an unexpected payload.
 				console.warn("Unexpected response from server:", data);
 				this.setStatus("Unexpected response from server.");
+				return false;
 				break;
 		}
-		return false;
+		return true;
 	}
 
 	/**
@@ -106,26 +179,13 @@ export class SignalingManager {
 			username: this.userName,
 			offer: offerToken,
 		});
-		const url = `${serverURL}?${params.toString()}`;
 
-		try {
-			const response = await fetch(url, {
-				method: "GET",
-				headers: {
-					Accept: "application/json",
-				},
-			});
-
-			const setup = await this.handlePingResponse(response);
-			if (setup) {
-				console.log("starting polling.");
-				//start polling after successful setup
-				this.startPolling();
-			}
-		} catch (error) {
-			console.error("Error initializing signaling server:", error);
-			this.setStatus("Unable to reach the signaling server during init.");
-		}
+		this.loggedIn = true;
+		await this._sendSeverMessage(
+			params,
+			this.handlePingResponse,
+			"Error initializing signaling server",
+		);
 	}
 
 	async handleOfferResponse(response) {
@@ -165,22 +225,12 @@ export class SignalingManager {
 			username: this.userName,
 			target: targetUser,
 		});
-		const url = `${serverURL}?${params.toString()}`;
 
-		try {
-			const response = await fetch(url, {
-				method: "GET",
-				headers: {
-					Accept: "application/json",
-				},
-			});
-			await this.handleOfferResponse(response);
-		} catch (error) {
-			console.error("Error requesting offer from server:", error);
-			this.setStatus(
-				"Unable to reach the signaling server when requesting offer.",
-			);
-		}
+		await this._sendSeverMessage(
+			params,
+			this.handleOfferResponse,
+			"Error requesting offer from signaling server",
+		);
 	}
 
 	async _sendAnswer(targetUser, answerToken) {
@@ -205,28 +255,15 @@ export class SignalingManager {
 			target: targetUser,
 			answer: answerToken,
 		});
-		const url = `${serverURL}?${params.toString()}`;
 
-		try {
-			const response = await fetch(url, {
-				method: "GET",
-				headers: {
-					Accept: "application/json",
-				},
-			});
-
-			//just check for response string to contain "ok"
-			await response.text().then((text) => {
-				if (!text.toLowerCase().includes("ok")) {
-					throw new Error(`Unexpected response from server: ${text}`);
-				}
-			});
-		} catch (error) {
-			console.error("Error sending answer to server:", error);
-			this.setStatus(
-				"Unable to reach the signaling server when sending answer.",
-			);
-		}
+		await this._sendSeverMessage(
+			params,
+			async (response) => {
+				const text = await response.text();
+				return text.toLowerCase().includes("ok");
+			},
+			"Error sending answer to signaling server",
+		);
 	}
 
 	/**
@@ -239,6 +276,33 @@ export class SignalingManager {
 	}
 
 	/**
+	 * Log out the current user and clear the username and target user.
+	 */
+	async logOut() {
+		if (!this.loggedIn) {
+			return;
+		}
+
+		console.log("Logging out from signaling server.");
+		this.stopPolling();
+
+		// send message to server to log out the current user
+		const params = new URLSearchParams({
+			action: "logout",
+			username: this.userName,
+		});
+
+		await this._sendSeverMessage(
+			params,
+			null,
+			"Error logging out from signaling server",
+		);
+
+		this.loggedIn = false;
+		this.targetUser = null;
+	}
+
+	/**
 	 * Start polling the signaling server for updates.
 	 *
 	 * Each ping keeps the current user's offer alive and returns the list of
@@ -247,7 +311,11 @@ export class SignalingManager {
 	 * @param {number} intervalMs - How often to poll in milliseconds.
 	 */
 	startPolling(intervalMs = 5000) {
-		this.stopPolling();
+		if (this.pollingHandle) {
+			// Polling is already running, no need to start another interval.
+			return;
+		}
+
 		this.pollingHandle = window.setInterval(() => {
 			this.pollOnce();
 		}, intervalMs);
@@ -279,21 +347,12 @@ export class SignalingManager {
 			action: "ping",
 			username: this.userName,
 		});
-		const url = `${serverURL}?${params.toString()}`;
+		this.loggedIn = true;
 
-		// The Apps Script expects a simple GET request, not a JSON POST body.
-		fetch(url, {
-			method: "GET",
-			headers: {
-				Accept: "application/json",
-			},
-		})
-			.then(async (response) => {
-				await this.handlePingResponse(response);
-			})
-			.catch((error) => {
-				console.error("Error pinging server:", error);
-				this.setStatus("Unable to reach the signaling server.");
-			});
+		this._sendSeverMessage(
+			params,
+			this.handlePingResponse,
+			"Error pinging signaling server",
+		);
 	}
 }

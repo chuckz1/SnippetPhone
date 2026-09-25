@@ -1,11 +1,13 @@
 import { WebRTCManager } from "./webrtc.js";
 import { VADManager } from "./vad.js";
 import { SignalingManager } from "./signaling.js";
+import { UserManager } from "./userManager.js";
 
 const state = {
 	webrtc: null,
 	vad: null,
 	signal: null,
+	userManager: null,
 };
 
 // DOM elements for user interaction and status display.
@@ -20,10 +22,35 @@ const answerInput = document.getElementById("answerInput");
 const statusLog = document.getElementById("statusLog");
 const remoteAudio = document.getElementById("remoteAudio");
 const activeUsersList = document.getElementById("activeUsersList");
-const currentUserName = document.getElementById("currentUserName");
+const userNameForm = document.getElementById("userNameForm");
+const userNameInput = document.getElementById("currentUserName");
+const userNameDisplay = document.getElementById("currentUserNameDisplay");
+const clearUserNameBtn = document.getElementById("clearUserNameBtn");
+
+const step1 = document.getElementById("Step1");
+const step2 = document.getElementById("Step2");
 
 function setStatus(message) {
 	statusLog.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
+}
+
+function setStepVisibility(stepIndex) {
+	step1.hidden = stepIndex !== 1;
+	step2.hidden = stepIndex !== 2;
+
+	//this switch if for activities that should happen whenever switching to a new step
+	switch (stepIndex) {
+		case 1:
+			// setStatus("Step 1: Initialize your username.");
+			break;
+		case 2:
+			// setStatus("Step 2: Connect with peers.");
+			startConnection();
+			break;
+		default:
+			setStatus("Unknown step.");
+			console.error("Unknown step.");
+	}
 }
 
 /**
@@ -76,6 +103,13 @@ function populateUserList(users = []) {
 }
 
 function ensureManagers() {
+	if (!state.userManager) {
+		state.userManager = new UserManager({
+			onStatus: setStatus,
+			onUserChange: handleNameChange,
+		});
+	}
+
 	if (!state.webrtc) {
 		state.webrtc = new WebRTCManager({
 			onStatus: setStatus,
@@ -133,6 +167,7 @@ function ensureManagers() {
 			},
 			onRestart: () => {
 				setStatus("Signaling server requested a restart.");
+				restart();
 			},
 		});
 	}
@@ -207,6 +242,33 @@ async function copyGeneratedAnswer() {
 	await copyToClipboard(state.webrtc.generatedAnswerToken);
 }
 
+async function handleNameChange(newName) {
+	ensureManagers();
+	if (!newName) {
+		setStatus("Username is required to proceed.");
+		return;
+	}
+
+	const userName = newName;
+
+	state.userManager.setUsername(userName);
+	state.signal.setUsername(userName);
+	// setStatus(`Username updated to: ${userName}`);
+	userNameDisplay.textContent = `Username: ${userName}`;
+
+	setStepVisibility(2);
+}
+
+async function restart() {
+	ensureManagers();
+
+	// tell server to log out the current user
+	await state.signal.logOut();
+
+	// reload the page
+	location.reload();
+}
+
 async function sendAnswerToServer(targetUser) {
 	ensureManagers();
 	await state.signal.requestOffer(targetUser);
@@ -235,13 +297,25 @@ copyAnswerBtn.addEventListener("click", async () => {
 completeCallBtn.addEventListener("click", async () => {
 	await completeOfferWithAnswer();
 });
+
+userNameForm.addEventListener("submit", async (event) => {
+	event.preventDefault();
+	await handleNameChange(userNameInput.value.trim());
+});
+
+clearUserNameBtn.addEventListener("click", async () => {
+	state.userManager.clearUsername();
+	setStepVisibility(1);
+	await restart();
+});
+
 //#endregion
 
 setStatus(
 	"Ready to start a call. Generate an offer, copy it, transfer it manually, then complete the call with the answer token.",
 );
 
-async function initializeVAD() {
+async function startConnection() {
 	if (!window.vad) {
 		setStatus(
 			"VAD library is still loading. Please wait a moment and try again.",
@@ -278,14 +352,13 @@ async function initializeVAD() {
 		);
 	}
 
-	// prompt user for username
-	const userName = prompt("Enter your username:");
-	if (!userName) {
-		setStatus("Username is required to proceed.");
-		return;
-	}
-	state.signal.setUsername(userName);
-	currentUserName.textContent = userName;
+	// // prompt user for username
+	// const userName = prompt("Enter your username:");
+	// if (!userName) {
+	// 	setStatus("Username is required to proceed.");
+	// 	return;
+	// }
+	// currentUserName.value = userName;
 
 	// Initialize the signaling manager if it hasn't been already.
 	try {
@@ -299,4 +372,19 @@ async function initializeVAD() {
 	}
 }
 
-initializeVAD();
+// make sure all managers are initialized before proceeding.
+ensureManagers();
+
+//call get username on load
+if (state.userManager) {
+	const savedUserName = state.userManager.getUsername();
+	if (savedUserName) {
+		userNameInput.value = savedUserName;
+		userNameDisplay.textContent = `Username: ${savedUserName}`;
+		state.signal.setUsername(savedUserName);
+
+		setStepVisibility(2);
+	} else {
+		setStepVisibility(1);
+	}
+}

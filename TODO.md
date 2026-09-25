@@ -1,0 +1,9 @@
+- [x] remove your own username from calling list
+- [] handle invalid responses / errors from server (like 404)
+- [] stream vad instead of waiting for complete audio
+- [x] remove buttons ui for generating and receiving tokens
+- [x] persist username saving over previous sessions
+- [] stop pinging server after connection
+- [] handle connection lost / rapid reconect logic
+- [] maybe add option to reject call before connecting? maybe do this on final project if this actually helps
+- [] implement text message based sending link that auto connects to offer and doesn't register client

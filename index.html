@@ -17,40 +17,61 @@
 			</div>
 		</header>
 
-		<section class="panel user-panel" aria-live="polite">
-			<h2>Current user</h2>
-			<div id="userDisplay" class="user-display">
-				<div class="user-info">
-					<p class="user-label">👤 Local user</p>
-					<strong id="currentUserName">Waiting for user name…</strong>
+		<section id="Step1" hidden>
+
+
+			<section class="panel user-panel" aria-live="polite">
+				<h2>Current user</h2>
+				<div id="userDisplay" class="user-display">
+					<div class="user-info">
+						<form id="userNameForm" autocomplete="off" novalidate>
+							<input id="currentUserName" type="text" placeholder="Enter your username"
+								autocomplete="off" />
+							<button type="submit" class="primary">Save</button>
+						</form>
+					</div>
 				</div>
-			</div>
+			</section>
 		</section>
 
-		<section class="panel">
-			<h2>1. Allow microphone access</h2>
-			<button id="startMicBtn" class="primary">Start microphone</button>
-			<p class="help-text">
-				This page does not use a signaling server. You will copy and paste the WebRTC
-				tokens between the two clients manually.
-			</p>
+		<section id="Step2" hidden>
+
+			<section class="panel">
+				<h2>Current user</h2>
+				<div id="userDisplay" class="user-display">
+					<div class="user-info">
+						<p class="user-label">👤 Local user</p>
+						<strong id="currentUserNameDisplay">Waiting for user name…</strong>
+						<button id="clearUserNameBtn" type="button" class="secondary">Clear</button>
+					</div>
+				</div>
+			</section>
+
+			<section class="panel" hidden>
+				<h2>1. Allow microphone access</h2>
+				<button id="startMicBtn" class="primary">Start microphone</button>
+				<p class="help-text">
+					This page does not use a signaling server. You will copy and paste the WebRTC
+					tokens between the two clients manually.
+				</p>
+			</section>
+
+			<section class="panel status-panel">
+				<h2>Connection status</h2>
+				<div id="statusLog" class="status-log" aria-live="polite">
+					Ready to start a call.
+				</div>
+			</section>
+
+			<section class="panel">
+				<h2>Available peers</h2>
+				<div id="activeUsersList" class="active-users-list" aria-live="polite">
+					<p class="empty-state">No active peers yet.</p>
+				</div>
+			</section>
 		</section>
 
-		<section class="panel status-panel">
-			<h2>Connection status</h2>
-			<div id="statusLog" class="status-log" aria-live="polite">
-				Ready to start a call.
-			</div>
-		</section>
-
-		<section class="panel">
-			<h2>Available peers</h2>
-			<div id="activeUsersList" class="active-users-list" aria-live="polite">
-				<p class="empty-state">No active peers yet.</p>
-			</div>
-		</section>
-
-		<section class="panel">
+		<section class="panel" hidden>
 			<h2>2. Manual token transfer</h2>
 			<div class="button-row">
 				<button id="createOfferBtn" class="primary">Generate offer</button>
@@ -74,7 +95,7 @@
 
 
 
-		<section class="panel audio-panel">
+		<section class="panel audio-panel" hidden>
 			<h2>Audio</h2>
 			<audio id="remoteAudio" autoplay playsinline></audio>
 		</section>
