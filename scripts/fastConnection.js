@@ -59,16 +59,27 @@ export class FastConnectionManager {
 	}
 
 	sendFastUrlWithText(username) {
-		//placeholder to open the default text messaging app with the fast connection URL & pre-filled message
 		const fastUrl = this._createFastUrl(username);
-		// Example: open the default messaging app with the fast URL
-		window.location.href = `sms:?body=${encodeURIComponent(fastUrl)}`;
+		const message =
+			"Hi, this is " +
+			username +
+			". I am in a poor cell connection and need to reach you. " +
+			"Please use this link to connect with me in SnippetPhone: " +
+			fastUrl +
+			" \n\nThis app lets us send short voice snippets instead of depending on a strong connection.";
+		window.location.href = `sms:?body=${encodeURIComponent(message)}`;
 	}
 
 	sendFastUrlWithEmail(username) {
-		//placeholder to open the default email client with the fast connection URL & pre-filled message
 		const fastUrl = this._createFastUrl(username);
-		// Example: open the default email client with the fast URL
-		window.location.href = `mailto:?subject=Fast Connection&body=${encodeURIComponent(fastUrl)}`;
+		const subject = "SnippetPhone: Quick contact while my connection is weak";
+		const body =
+			"Hi,\n\nThis is " +
+			username +
+			". I am currently in an area with poor cell service and need to reach you. " +
+			"Please use this link to connect with me in SnippetPhone: \n" +
+			fastUrl +
+			"\n\nThis app is designed for short voice snippets when a normal cellular connection is unreliable.";
+		window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 	}
 }
