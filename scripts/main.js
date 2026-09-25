@@ -204,7 +204,12 @@ async function processIncomingToken() {
 async function completeOfferWithAnswer() {
 	ensureManagers();
 	const rawText = answerInput.value.trim();
-	await state.webrtc.completeOfferWithAnswer(rawText);
+	if (await state.webrtc.completeOfferWithAnswer(rawText)) {
+		setStatus("Offer completed successfully.");
+
+		//stop polling for active users after the offer is completed successfully.
+		state.signal.stopPolling();
+	}
 }
 
 async function copyToClipboard(value) {

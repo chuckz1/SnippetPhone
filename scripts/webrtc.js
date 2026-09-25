@@ -296,7 +296,7 @@ export class WebRTCManager {
 		const tokenText = (rawText || "").trim();
 		if (!tokenText) {
 			this.setStatus("Paste the answer token before completing the call.");
-			return;
+			return false;
 		} else {
 			console.log("token text: ", tokenText);
 		}
@@ -307,19 +307,19 @@ export class WebRTCManager {
 		} catch (error) {
 			this.setStatus("The pasted answer token is not valid JSON.");
 			console.error(error);
-			return;
+			return false;
 		}
 
 		if (!token || !token.type || token.type !== "answer" || !token.sdp) {
 			this.setStatus("The pasted answer token looks invalid.");
-			return;
+			return false;
 		}
 
 		if (!this.peer) {
 			this.setStatus(
 				"There is no active offer to complete. Generate an offer first.",
 			);
-			return;
+			return false;
 		}
 
 		await this.peer.setRemoteDescription(
@@ -327,5 +327,6 @@ export class WebRTCManager {
 		);
 		await this.applyCandidates(token.candidates || []);
 		this.setStatus("Answer applied. The call is now connected.");
+		return true;
 	}
 }
