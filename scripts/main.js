@@ -434,6 +434,7 @@ if (
 	const fastTarget = state.fastConnectionManager.getFastTarget();
 	if (fastTarget) {
 		setStatus(`Fast connection target detected: ${fastTarget}`);
+		// setStepVisibility(2);
 		// You can now use fastTarget to initiate a fast connection
 		state.signal.requestOffer(fastTarget);
 	}
