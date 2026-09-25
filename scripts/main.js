@@ -2,12 +2,14 @@ import { WebRTCManager } from "./webrtc.js";
 import { VADManager } from "./vad.js";
 import { SignalingManager } from "./signaling.js";
 import { UserManager } from "./userManager.js";
+import { FastConnectionManager } from "./fastConnection.js";
 
 const state = {
 	webrtc: null,
 	vad: null,
 	signal: null,
 	userManager: null,
+	fastConnectionManager: null,
 };
 
 // DOM elements for user interaction and status display.
@@ -26,6 +28,8 @@ const userNameForm = document.getElementById("userNameForm");
 const userNameInput = document.getElementById("currentUserName");
 const userNameDisplay = document.getElementById("currentUserNameDisplay");
 const clearUserNameBtn = document.getElementById("clearUserNameBtn");
+const shareFastTextBtn = document.getElementById("shareFastTextBtn");
+const shareFastEmailBtn = document.getElementById("shareFastEmailBtn");
 
 const step1 = document.getElementById("Step1");
 const step2 = document.getElementById("Step2");
@@ -171,6 +175,12 @@ function ensureManagers() {
 			},
 		});
 	}
+
+	if (!state.fastConnectionManager) {
+		state.fastConnectionManager = new FastConnectionManager({
+			onStatus: setStatus,
+		});
+	}
 }
 
 //#region Event Listeners
@@ -279,6 +289,34 @@ async function sendAnswerToServer(targetUser) {
 	await state.signal.requestOffer(targetUser);
 }
 
+function getCurrentUserName() {
+	ensureManagers();
+	const username = state.userManager.getUsername();
+	if (!username) {
+		setStatus("Save a username before sharing a fast connection link.");
+		return null;
+	}
+	return username;
+}
+
+function shareFastConnectionVia(methodName) {
+	const username = getCurrentUserName();
+	if (!username) {
+		return;
+	}
+
+	if (!state.fastConnectionManager) {
+		state.fastConnectionManager = new FastConnectionManager({
+			onStatus: setStatus,
+		});
+	}
+
+	state.fastConnectionManager[methodName](username);
+	setStatus(
+		`Opening ${methodName === "sendFastUrlWithText" ? "text" : "email"} share flow for ${username}.`,
+	);
+}
+
 startMicBtn.addEventListener("click", async () => {
 	await startMicrophone();
 });
@@ -312,6 +350,14 @@ clearUserNameBtn.addEventListener("click", async () => {
 	state.userManager.clearUsername();
 	setStepVisibility(1);
 	await restart();
+});
+
+shareFastTextBtn.addEventListener("click", () => {
+	shareFastConnectionVia("sendFastUrlWithText");
+});
+
+shareFastEmailBtn.addEventListener("click", () => {
+	shareFastConnectionVia("sendFastUrlWithEmail");
 });
 
 //#endregion
@@ -380,16 +426,29 @@ async function startConnection() {
 // make sure all managers are initialized before proceeding.
 ensureManagers();
 
-//call get username on load
-if (state.userManager) {
-	const savedUserName = state.userManager.getUsername();
-	if (savedUserName) {
-		userNameInput.value = savedUserName;
-		userNameDisplay.textContent = `Username: ${savedUserName}`;
-		state.signal.setUsername(savedUserName);
+//check if this is a fast connection
+if (
+	state.fastConnectionManager &&
+	state.fastConnectionManager.isFastConnection()
+) {
+	const fastTarget = state.fastConnectionManager.getFastTarget();
+	if (fastTarget) {
+		setStatus(`Fast connection target detected: ${fastTarget}`);
+		// You can now use fastTarget to initiate a fast connection
+		state.signal.requestOffer(fastTarget);
+	}
+} else {
+	//call get username on load
+	if (state.userManager) {
+		const savedUserName = state.userManager.getUsername();
+		if (savedUserName) {
+			userNameInput.value = savedUserName;
+			userNameDisplay.textContent = `Username: ${savedUserName}`;
+			state.signal.setUsername(savedUserName);
 
-		setStepVisibility(2);
-	} else {
-		setStepVisibility(1);
+			setStepVisibility(2);
+		} else {
+			setStepVisibility(1);
+		}
 	}
 }
