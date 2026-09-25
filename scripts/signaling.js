@@ -199,10 +199,11 @@ export class SignalingManager {
 	}
 
 	async requestOffer(targetUser) {
-		if (!this.userName) {
-			console.warn("requestOffer called without a username.");
-			return;
-		}
+		// username is not needed for fast connection request
+		// if (!this.userName) {
+		// 	console.warn("requestOffer called without a username.");
+		// 	return;
+		// }
 
 		if (!targetUser) {
 			console.warn("requestOffer called without a target user.");
@@ -214,7 +215,7 @@ export class SignalingManager {
 
 		const params = new URLSearchParams({
 			action: "getOffer",
-			username: this.userName,
+			// username: this.userName,
 			target: targetUser,
 		});
 
