@@ -237,10 +237,11 @@ export class SignalingManager {
 			return;
 		}
 
-		if (!this.userName) {
-			console.warn("sendAnswer called without a username.");
-			return;
-		}
+		// username is not needed for fast connection answer
+		// if (!this.userName) {
+		// 	console.warn("sendAnswer called without a username.");
+		// 	return;
+		// }
 
 		const params = new URLSearchParams({
 			action: "sendAnswer",
