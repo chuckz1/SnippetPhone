@@ -67,7 +67,7 @@ export class FastConnectionManager {
 			"Please use this link to connect with me in SnippetPhone: " +
 			fastUrl +
 			" \n\nThis app lets us send short voice snippets instead of depending on a strong connection.";
-		window.location.href = `sms:?body=${encodeURIComponent(message)}`;
+		window.open(`sms:?body=${encodeURIComponent(message)}`, "_blank");
 	}
 
 	sendFastUrlWithEmail(username) {
@@ -80,6 +80,9 @@ export class FastConnectionManager {
 			"Please use this link to connect with me in SnippetPhone: \n" +
 			fastUrl +
 			"\n\nThis app is designed for short voice snippets when a normal cellular connection is unreliable.";
-		window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+		window.open(
+			`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,
+			"_blank",
+		);
 	}
 }
