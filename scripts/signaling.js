@@ -176,6 +176,8 @@ export class SignalingManager {
 			offer: offerToken,
 		});
 
+		console.log("Initializing signaling with offer token:", offerToken);
+
 		this.loggedIn = true;
 		await this._sendSeverMessage(
 			params,
@@ -258,6 +260,8 @@ export class SignalingManager {
 			},
 			"Error sending answer to signaling server",
 		);
+
+		console.log("Answer sent to signaling server for target user:", targetUser);
 	}
 
 	/**
