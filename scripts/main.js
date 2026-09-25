@@ -411,45 +411,54 @@ async function startConnection() {
 	// }
 	// currentUserName.value = userName;
 
-	// Initialize the signaling manager if it hasn't been already.
-	try {
-		await state.signal.init(state.webrtc.generatedOfferToken);
-		setStatus("Signaling manager is ready. You can now start a call.");
-	} catch (error) {
-		console.error(error);
-		setStatus(
-			"The signaling manager could not initialize. Check the browser console for details.",
-		);
+	//check if this is a fast connection
+	if (
+		state.fastConnectionManager &&
+		state.fastConnectionManager.isFastConnection()
+	) {
+		// skip init of signaling manager for fast connections
+		const fastTarget = state.fastConnectionManager.getFastTarget();
+		if (fastTarget) {
+			setStatus(`Fast connection target detected: ${fastTarget}`);
+			// setStepVisibility(2);
+			// You can now use fastTarget to initiate a fast connection
+			state.signal.requestOffer(fastTarget);
+		} else {
+			setStatus("Fast connection detected, but no fast target is available.");
+		}
+	} else {
+		// Initialize the signaling manager normal way
+		try {
+			await state.signal.init(state.webrtc.generatedOfferToken);
+			setStatus("Signaling manager is ready. You can now start a call.");
+		} catch (error) {
+			console.error(error);
+			setStatus(
+				"The signaling manager could not initialize. Check the browser console for details.",
+			);
+		}
 	}
 }
 
 // make sure all managers are initialized before proceeding.
 ensureManagers();
 
-//check if this is a fast connection
-if (
-	state.fastConnectionManager &&
-	state.fastConnectionManager.isFastConnection()
-) {
-	const fastTarget = state.fastConnectionManager.getFastTarget();
-	if (fastTarget) {
-		setStatus(`Fast connection target detected: ${fastTarget}`);
-		// setStepVisibility(2);
-		// You can now use fastTarget to initiate a fast connection
-		state.signal.requestOffer(fastTarget);
+//call get username on load
+if (state.userManager && state.fastConnectionManager) {
+	const savedUserName = state.userManager.getUsername();
+	if (savedUserName) {
+		userNameInput.value = savedUserName;
+		userNameDisplay.textContent = `Username: ${savedUserName}`;
+		state.signal.setUsername(savedUserName);
+
+		setStepVisibility(2);
+	} else if (state.fastConnectionManager.isFastConnection()) {
+		userNameDisplay.textContent = `Username: Temp User`;
+		setStatus("Fast connection detected, but no username is set.");
+		setStepVisibility(2);
+	} else {
+		setStepVisibility(1);
 	}
 } else {
-	//call get username on load
-	if (state.userManager) {
-		const savedUserName = state.userManager.getUsername();
-		if (savedUserName) {
-			userNameInput.value = savedUserName;
-			userNameDisplay.textContent = `Username: ${savedUserName}`;
-			state.signal.setUsername(savedUserName);
-
-			setStepVisibility(2);
-		} else {
-			setStepVisibility(1);
-		}
-	}
+	setStatus("User manager or fast connection manager is not available.");
 }
