@@ -1,5 +1,7 @@
 const serverURL =
-	"https://script.google.com/macros/s/AKfycbzrDW6pei-ZNnki1AdPZBVxg3WbckDUhAphOHN2NbNgpUSHlvCkAwg7c53YXDreVesQhg/exec";
+	// "https://script.google.com/macros/s/AKfycbzrDW6pei-ZNnki1AdPZBVxg3WbckDUhAphOHN2NbNgpUSHlvCkAwg7c53YXDreVesQhg/exec";
+	"https://snippetphone.fehringerfarms.com";
+
 const serverRetryInterval = 5000; // Retry interval in milliseconds if the server is unreachable.
 const serverRetryCount = 3; // Number of times to retry if the server is unreachable.
 

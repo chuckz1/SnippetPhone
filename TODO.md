@@ -9,3 +9,4 @@
 - [] implement text message based sending link that auto connects to offer and doesn't register client
 - [] imporove error messages to basic user can understand what is going wrong
 - [] add mute and stop call buttons
+- [] switch to node server
