@@ -78,6 +78,7 @@ export class CompressionManager {
 	 * @returns {any} - The compressed data.
 	 */
 	compress(data) {
+		console.log("Compressing data with mode:", this.mode);
 		if (!data || data.length === 0) {
 			return null;
 		}
@@ -116,6 +117,7 @@ export class CompressionManager {
 	 * @returns {any} - The decompressed data.
 	 */
 	decompress(data) {
+		console.log("Decompressing data with mode:", this.mode);
 		if (!data || data.length === 0) {
 			return null;
 		}
