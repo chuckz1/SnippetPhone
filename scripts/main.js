@@ -86,6 +86,7 @@ function setStepVisibility(stepIndex) {
 			break;
 		case 2:
 			// setStatus("Step 2: Connect with peers.");
+			resetAllManagers();
 			startConnection();
 			break;
 		case 3:
@@ -192,6 +193,31 @@ function ensureManagers() {
 					setStatus("Speech snippet sent over the WebRTC data channel.");
 				}
 			},
+			onCallStarted: () => {
+				setStatus("Call started successfully.");
+				//stop polling for active users after the offer is completed successfully.
+				state.signal.stopPolling();
+
+				//display step 3
+				setStepVisibility(3);
+			},
+			onCallEnded: (gracefully) => {
+				setStatus(`Call ended ${gracefully ? "gracefully" : "unexpectedly"}.`);
+
+				// Check if the call ended gracefully,
+				if (gracefully) {
+					//check if this was fast connection or a regular call
+					if (state.fastConnectionManager) {
+						// Close the window
+						window.close();
+					} else {
+						// Reset to step 1 after a graceful call end.
+						setStepVisibility(1);
+					}
+				} else {
+					//TODO: handle unexpected call termination.
+				}
+			},
 		});
 	}
 
@@ -256,12 +282,6 @@ async function completeOfferWithAnswer() {
 	const rawText = answerInput.value.trim();
 	if (await state.webrtc.completeOfferWithAnswer(rawText)) {
 		setStatus("Offer completed successfully.");
-
-		//stop polling for active users after the offer is completed successfully.
-		state.signal.stopPolling();
-
-		//display step 3
-		setStepVisibility(3);
 	}
 }
 
@@ -325,6 +345,22 @@ async function restart() {
 
 	// reload the page
 	location.reload();
+}
+
+async function resetAllManagers() {
+	ensureManagers();
+	if (state.userManager) {
+		state.userManager.resetManager();
+	}
+	if (state.vad) {
+		state.vad.resetManager();
+	}
+	if (state.webrtc) {
+		state.webrtc.resetManager();
+	}
+	if (state.fastConnectionManager) {
+		state.fastConnectionManager.resetManager();
+	}
 }
 
 async function sendAnswerToServer(targetUser) {

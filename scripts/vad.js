@@ -15,6 +15,15 @@ export class VADManager {
 		this.onStatus(message);
 	}
 
+	resetManager() {
+		this.vad = null;
+		this.isRunning = false;
+		this.audioContext = null;
+		this.processor = null;
+		this.stream = null;
+		this.muted = false;
+	}
+
 	async startMic() {
 		if (this.stream) {
 			this.setStatus("Microphone is already active.");

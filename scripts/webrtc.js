@@ -12,9 +12,11 @@ const config = {
 };
 
 export class WebRTCManager {
-	constructor({ onStatus, onRemoteSnippet } = {}) {
+	constructor({ onStatus, onRemoteSnippet, onCallStarted, onCallEnded } = {}) {
 		this.onStatus = onStatus || (() => {});
 		this.onRemoteSnippet = onRemoteSnippet || (() => {});
+		this.onCallStarted = onCallStarted || (() => {});
+		this.onCallEnded = onCallEnded || ((gracefully) => {});
 		this.peer = null;
 		this.dataChannel = null;
 		this.generatedOfferToken = "";
@@ -23,10 +25,16 @@ export class WebRTCManager {
 		this.offerIceCandidates = [];
 		this.answerIceCandidates = [];
 		this.muted = false;
+		this.endingCall = false;
 	}
 
 	setStatus(message) {
 		this.onStatus(message);
+	}
+
+	resetManager() {
+		this.cleanupPeerConnection();
+		this.muted = false;
 	}
 
 	setMuted(enabled) {
@@ -107,10 +115,12 @@ export class WebRTCManager {
 
 		channel.onopen = () => {
 			this.setStatus("Data channel is open. VAD snippets can be sent.");
+			this.onCallStarted();
 		};
 
 		channel.onclose = () => {
 			this.setStatus("Data channel closed.");
+			this.onCallEnded(this.endingCall);
 		};
 
 		channel.onmessage = (event) => {
@@ -147,6 +157,7 @@ export class WebRTCManager {
 				: "The call was ended by the other participant.",
 		);
 
+		this.endingCall = true;
 		this.cleanupPeerConnection();
 	}
 
@@ -166,6 +177,7 @@ export class WebRTCManager {
 		this.generatedOfferToken = "";
 		this.generatedAnswerToken = "";
 		this.muted = false;
+		this.endingCall = false;
 	}
 
 	async sendSnippet(audioBuffer) {

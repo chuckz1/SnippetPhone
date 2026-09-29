@@ -25,6 +25,13 @@ export class FastConnectionManager {
 	}
 
 	/**
+	 * Reset the fast connection manager to its initial state.
+	 */
+	resetManager() {
+		this.userName = "";
+	}
+
+	/**
 	 * Determine if the current connection should be treated as a fast connection.
 	 *
 	 * @returns {boolean} True if this is a fast connection, false otherwise.

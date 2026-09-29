@@ -41,6 +41,20 @@ export class SignalingManager {
 	}
 
 	/**
+	 * Reset the signaling manager to its initial state.
+	 */
+	resetManager() {
+		this.userName = "";
+		this.targetUser = "";
+		this.activeUsers = [];
+		if (this.pollingHandle) {
+			clearInterval(this.pollingHandle);
+			this.pollingHandle = null;
+		}
+		this.loggedIn = false;
+	}
+
+	/**
 	 * Send a message to the signaling server.
 	 * Handles ensuring the message is properly sent to the server.
 	 * and retrying if necessary.
@@ -282,6 +296,11 @@ export class SignalingManager {
 	 */
 	async logOut() {
 		if (!this.loggedIn) {
+			return;
+		}
+
+		if (!this.userName) {
+			console.warn("logOut called without a username.");
 			return;
 		}
 

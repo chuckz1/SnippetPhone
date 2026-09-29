@@ -14,6 +14,13 @@ export class UserManager {
 	}
 
 	/**
+	 * Reset the user manager to its initial state.
+	 */
+	resetManager() {
+		this.userName = "";
+	}
+
+	/**
 	 * Get the current username.
 	 *
 	 * @returns {string} The current username.
