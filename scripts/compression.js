@@ -36,7 +36,7 @@ export class CompressionManager {
 			out[i] = ~(sign | (exponent << 4) | mantissa);
 		}
 
-		return out;
+		return out.buffer; // return ArrayBuffer
 	}
 
 	// ----------------------------------------------------
@@ -57,7 +57,7 @@ export class CompressionManager {
 			out[i] = sample;
 		}
 
-		return out;
+		return out.buffer; // return ArrayBuffer
 	}
 
 	// ----------------------------------------------------
@@ -68,77 +68,78 @@ export class CompressionManager {
 		for (let i = 0; i < out.length; i++) {
 			out[i] = int16[i * factor];
 		}
-		return out;
+		return out.buffer; // return ArrayBuffer
 	}
 
-	/**
-	 * Compress the given data.
-	 *
-	 * @param {any} data - The data to compress.
-	 * @returns {any} - The compressed data.
-	 */
-	compress(data) {
+	// ----------------------------------------------------
+	// COMPRESS (ArrayBuffer → ArrayBuffer)
+	// ----------------------------------------------------
+	compress(buffer) {
 		console.log("Compressing data with mode:", this.mode);
-		if (!data || !data.length || data.length === 0) {
+
+		if (!(buffer instanceof ArrayBuffer) || buffer.byteLength === 0) {
 			console.log("No data to compress.");
 			return null;
 		}
 
 		try {
+			const int16 = new Int16Array(buffer);
+
 			if (this.mode === "mulaw") {
 				this.setStatus("Compressing with μ-law.");
-				return this.pcm16ToMulaw(data);
+				return this.pcm16ToMulaw(int16);
 			}
 
 			if (this.mode === "downsample-mulaw") {
 				this.setStatus("Compressing with downsample + μ-law.");
-				const down = this.downsample(data, 3); // 48k → 16k
+				const downBuf = this.downsample(int16, 3);
+				const down = new Int16Array(downBuf);
 				return this.pcm16ToMulaw(down);
 			}
 
 			if (this.mode === "downsample") {
 				this.setStatus("Compressing with downsample.");
-				const down = this.downsample(data, 3); // 48k → 16k
-				return new Uint8Array(down.buffer);
+				return this.downsample(int16, 3);
 			}
 
-			console.log("Unknown compression mode, sending raw PCM.");
+			// RAW PCM (none)
 			this.setStatus("Compression disabled, sending raw PCM.");
-			return new Uint8Array(data.buffer);
+			return buffer;
 		} catch (error) {
 			console.error("Compression failed:", error);
 			this.setStatus("Compression failed, sending raw PCM.");
-			return new Uint8Array(data.buffer);
+			return buffer;
 		}
 	}
 
-	/**
-	 * Decompress the given data.
-	 *
-	 * @param {any} data - The data to decompress.
-	 * @returns {any} - The decompressed data.
-	 */
-	decompress(data) {
+	// ----------------------------------------------------
+	// DECOMPRESS (ArrayBuffer → ArrayBuffer)
+	// ----------------------------------------------------
+	decompress(buffer) {
 		console.log("Decompressing data with mode:", this.mode);
-		if (!data || !data.length || data.length === 0) {
+
+		if (!(buffer instanceof ArrayBuffer) || buffer.byteLength === 0) {
 			console.log("No data to decompress.");
 			return null;
 		}
 
 		try {
 			if (this.mode === "mulaw") {
-				return this.mulawToPcm16(data);
+				const bytes = new Uint8Array(buffer);
+				return this.mulawToPcm16(bytes);
 			}
 
 			if (this.mode === "downsample-mulaw") {
-				// Decode μ-law → PCM16 @ 16kHz
-				const pcm = this.mulawToPcm16(data);
-				return pcm; // You can play 16kHz directly
+				const bytes = new Uint8Array(buffer);
+				return this.mulawToPcm16(bytes);
 			}
 
-			console.log("Unknown compression mode, assuming raw PCM.");
-			// Raw PCM fallback
-			return new Int16Array(data.buffer);
+			if (this.mode === "downsample") {
+				return buffer; // already PCM16 @ 16kHz
+			}
+
+			// RAW PCM (none)
+			return buffer;
 		} catch (error) {
 			console.error("Decompression failed:", error);
 			this.setStatus("Decompression failed.");

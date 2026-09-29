@@ -290,8 +290,8 @@ export class WebRTCManager {
 		}
 
 		// Decompress the received audio buffer before playback.
-		const pcm = this.decompressAudio(audioBuffer);
-		// const pcm = new Int16Array(decompressedAudioBuffer);
+		const decompressedAudioBuffer = this.decompressAudio(audioBuffer);
+		const pcm = new Int16Array(decompressedAudioBuffer);
 		const floatData = new Float32Array(pcm.length);
 
 		for (let index = 0; index < pcm.length; index += 1) {
