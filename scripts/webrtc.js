@@ -160,6 +160,8 @@ export class WebRTCManager {
 				: "The call was ended by the other participant.",
 		);
 
+		console.log("Remote requested to hang up the call.");
+
 		this.endingCall = true;
 		this.cleanupPeerConnection();
 	}
