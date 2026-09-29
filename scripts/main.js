@@ -191,7 +191,7 @@ function ensureManagers() {
 
 				// log out the user from the signaling server.
 				// this also stops polling for active users.
-				state.signal.logout();
+				state.signal.logOut();
 
 				// //stop polling for active users after the offer is completed successfully.
 				// state.signal.stopPolling();
