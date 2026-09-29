@@ -165,13 +165,13 @@ function ensureManagers() {
 			onCallStarted: () => {
 				setStatus("Call started successfully.");
 				console.log("Call started, stopping active user polling.");
-				//stop polling for active users after the offer is completed successfully.
-				state.signal.stopPolling();
+				// //stop polling for active users after the offer is completed successfully.
+				// state.signal.stopPolling();
 
-				// Unmute the VAD manager when the call starts.
-				if (state.vad) {
-					state.vad.setMuted(false);
-				}
+				// // Unmute the VAD manager when the call starts.
+				// if (state.vad) {
+				// 	state.vad.setMuted(false);
+				// }
 
 				//display step 3
 				setStepVisibility(3);
