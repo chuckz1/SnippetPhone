@@ -165,8 +165,12 @@ function ensureManagers() {
 			onCallStarted: () => {
 				setStatus("Call started successfully.");
 
-				//stop polling for active users after the offer is completed successfully.
-				state.signal.stopPolling();
+				// log out the user from the signaling server.
+				// this also stops polling for active users.
+				state.signal.logout();
+
+				// //stop polling for active users after the offer is completed successfully.
+				// state.signal.stopPolling();
 
 				// Unmute the VAD manager when the call starts.
 				if (state.vad) {
