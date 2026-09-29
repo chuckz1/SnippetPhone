@@ -214,6 +214,8 @@ function ensureManagers() {
 						// Close the window
 						window.close();
 					} else {
+						updateWebrtcState("hangup");
+
 						// Reset to step 1 after a graceful call end.
 						setStepVisibility(1);
 					}

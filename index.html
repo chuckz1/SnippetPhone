@@ -17,7 +17,7 @@
 			</div>
 		</header>
 
-		<section id="Step0">
+		<section id="Step0" hidden>
 			<section class="panel intro-panel">
 				<h2>Welcome to SnippetPhone</h2>
 				<p>
@@ -52,7 +52,7 @@
 			</section>
 		</section>
 
-		<section id="Step2">
+		<section id="Step2" hidden>
 
 			<section class="panel">
 				<h2>Current user</h2>
@@ -62,15 +62,6 @@
 						<strong id="currentUserNameDisplay">Waiting for user name…</strong>
 						<button id="clearUserNameBtn" type="button" class="secondary">Clear</button>
 					</div>
-				</div>
-			</section>
-
-
-
-			<section class="panel status-panel">
-				<h2>Connection status</h2>
-				<div id="statusLog" class="status-log" aria-live="polite">
-					Ready to start a call.
 				</div>
 			</section>
 
@@ -121,6 +112,13 @@
 					<button id="endCallBtn" class="danger" type="button">End call</button>
 				</div>
 			</section>
+		</section>
+
+		<section class="panel status-panel">
+			<h2>Connection log</h2>
+			<div id="statusLog" class="status-log" aria-live="polite">
+				Ready to start a call.
+			</div>
 		</section>
 
 		<section class="panel" hidden>
