@@ -1,5 +1,5 @@
 export class CompressionManager {
-	constructor({ onStatus = () => {}, mode = "mulaw" } = {}) {
+	constructor({ onStatus = () => {}, mode = "downsample" } = {}) {
 		this.onStatus = onStatus;
 		this.encoder = null;
 		this.sampleRate = 16000; // match your VAD / audio pipeline
@@ -93,6 +93,11 @@ export class CompressionManager {
 				this.setStatus("Compressing with downsample + μ-law.");
 				const down = this.downsample(pcmInt16, 3); // 48k → 16k
 				return this.pcm16ToMulaw(down);
+			}
+
+			if (this.mode === "downsample") {
+				this.setStatus("Compressing with downsample only.");
+				return this.downsample(pcmInt16, 3); // 48k → 16k
 			}
 
 			this.setStatus("Compression disabled, sending raw PCM.");
