@@ -4,9 +4,9 @@
 - [x] remove buttons ui for generating and receiving tokens
 - [x] persist username saving over previous sessions
 - [x] stop pinging server after connection
-- [] handle connection lost / rapid reconect logic
+- [] handle connection lost / rapid reconnect logic
 - [] maybe add option to reject call before connecting? maybe do this on final project if this actually helps
-- [] implement text message based sending link that auto connects to offer and doesn't register client
-- [] imporove error messages to basic user can understand what is going wrong
-- [] add mute and stop call buttons
+- [x] implement text message based sending link that auto connects to offer and doesn't register client
+- [x] imporove error messages to basic user can understand what is going wrong
+- [x] add mute and stop call buttons
 - [x] switch to node server
