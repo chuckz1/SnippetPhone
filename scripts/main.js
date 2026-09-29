@@ -3,7 +3,7 @@ import { VADManager } from "./vad.js";
 import { SignalingManager } from "./signaling.js";
 import { UserManager } from "./userManager.js";
 import { FastConnectionManager } from "./fastConnection.js";
-//test push
+
 const state = {
 	webrtc: null,
 	vad: null,
