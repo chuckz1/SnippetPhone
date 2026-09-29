@@ -37,8 +37,9 @@ export class WebRTCManager {
 		this.muted = false;
 	}
 
-	setMuted(enabled) {
-		this.muted = enabled;
+	toggleMuted() {
+		this.muted = !this.muted;
+		return this.muted;
 	}
 
 	async initWebRTC() {

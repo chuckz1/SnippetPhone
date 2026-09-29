@@ -88,5 +88,11 @@ export class VADManager {
 
 	setMuted(enabled) {
 		this.muted = enabled;
+		return this.muted;
+	}
+
+	toggleMuted() {
+		this.muted = !this.muted;
+		return this.muted;
 	}
 }

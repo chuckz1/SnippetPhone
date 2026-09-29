@@ -402,20 +402,20 @@ function shareFastConnectionVia(methodName) {
 	);
 }
 
-function toggleVad(enabled) {
+function toggleVad() {
 	ensureManagers();
-	state.vad.setMuted(enabled);
+	let muted = state.vad.toggleMuted();
 
 	//set ui
-	muteBtn.textContent = enabled ? "🔇 Mic Muted" : "🔊 Mic On";
+	muteBtn.textContent = muted ? "🔇 Mic Muted" : "🔊 Mic On";
 }
 
-function toggleSpeaker(enabled) {
+function toggleSpeaker() {
 	ensureManagers();
-	state.webrtc.setMuted(!enabled);
+	let muted = state.webrtc.toggleMuted();
 
 	//set ui
-	speakerBtn.textContent = enabled ? "🔊 Speaker on" : "🔇 Speaker off";
+	speakerBtn.textContent = muted ? "🔇 Speaker off" : "🔊 Speaker on";
 }
 
 function endCall() {
@@ -472,11 +472,11 @@ startIntroBtn.addEventListener("click", async () => {
 });
 
 muteBtn.addEventListener("click", async () => {
-	await toggleVad(true);
+	await toggleVad();
 });
 
 speakerBtn.addEventListener("click", async () => {
-	await toggleSpeaker(true);
+	await toggleSpeaker();
 });
 
 endCallBtn.addEventListener("click", async () => {
