@@ -162,6 +162,37 @@ function ensureManagers() {
 				// Remote snippets are played through the WebRTC data channel callback and
 				// do not require a separate audio element in the DOM.
 			},
+			onCallStarted: () => {
+				setStatus("Call started successfully.");
+				console.log("Call started, stopping active user polling.");
+				//stop polling for active users after the offer is completed successfully.
+				state.signal.stopPolling();
+
+				// Unmute the VAD manager when the call starts.
+				if (state.vad) {
+					state.vad.setMuted(false);
+				}
+
+				//display step 3
+				setStepVisibility(3);
+			},
+			onCallEnded: (gracefully) => {
+				setStatus(`Call ended ${gracefully ? "gracefully" : "unexpectedly"}.`);
+
+				// Check if the call ended gracefully,
+				if (gracefully) {
+					//check if this was fast connection or a regular call
+					if (state.fastConnectionManager) {
+						// Close the window
+						window.close();
+					} else {
+						// Reset to step 1 after a graceful call end.
+						setStepVisibility(1);
+					}
+				} else {
+					//TODO: handle unexpected call termination.
+				}
+			},
 		});
 	}
 
@@ -191,36 +222,6 @@ function ensureManagers() {
 				const sent = await state.webrtc.sendSnippet(buffer);
 				if (sent) {
 					setStatus("Speech snippet sent over the WebRTC data channel.");
-				}
-			},
-			onCallStarted: () => {
-				setStatus("Call started successfully.");
-				//stop polling for active users after the offer is completed successfully.
-				state.signal.stopPolling();
-
-				// Unmute the VAD manager when the call starts.
-				if (state.vad) {
-					state.vad.setMuted(false);
-				}
-
-				//display step 3
-				setStepVisibility(3);
-			},
-			onCallEnded: (gracefully) => {
-				setStatus(`Call ended ${gracefully ? "gracefully" : "unexpectedly"}.`);
-
-				// Check if the call ended gracefully,
-				if (gracefully) {
-					//check if this was fast connection or a regular call
-					if (state.fastConnectionManager) {
-						// Close the window
-						window.close();
-					} else {
-						// Reset to step 1 after a graceful call end.
-						setStepVisibility(1);
-					}
-				} else {
-					//TODO: handle unexpected call termination.
 				}
 			},
 		});
