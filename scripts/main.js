@@ -405,11 +405,17 @@ function shareFastConnectionVia(methodName) {
 function toggleVad(enabled) {
 	ensureManagers();
 	state.vad.setMuted(enabled);
+
+	//set ui
+	muteBtn.textContent = enabled ? "🔇 Mic Muted" : "🔊 Mic On";
 }
 
 function toggleSpeaker(enabled) {
 	ensureManagers();
 	state.webrtc.setMuted(!enabled);
+
+	//set ui
+	speakerBtn.textContent = enabled ? "🔊 Speaker on" : "🔇 Speaker off";
 }
 
 function endCall() {
