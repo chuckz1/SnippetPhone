@@ -17,6 +17,24 @@
 			</div>
 		</header>
 
+		<section id="Step0">
+			<section class="panel intro-panel">
+				<h2>Welcome to SnippetPhone</h2>
+				<p>
+					SnippetPhone is a browser-to-browser voice call. It records just the snippets with voice and ensures
+					they get sent. This improves calls in poor network conditions.
+				</p>
+				<hr />
+				<p>
+					To make the demo work, the app needs microphone access so it can listen for your voice and send only
+					the moments you speak. This is used only for your conversation and is not stored or transmitted
+					elsewhere.
+				</p>
+				<p>If you deny microphone access, the app will break and you won't be able to make voice calls.</p>
+				<button id="startIntroBtn" class="primary" type="button">Allow microphone</button>
+			</section>
+		</section>
+
 		<section id="Step1" hidden>
 
 
@@ -68,6 +86,31 @@
 				<div class="button-row">
 					<button id="shareFastTextBtn" class="primary" type="button">Send via text</button>
 					<button id="shareFastEmailBtn" class="secondary" type="button">Send via email</button>
+				</div>
+			</section>
+		</section>
+
+		<section id="Step3" hidden>
+			<section class="panel call-panel">
+				<div class="call-header">
+					<div>
+						<p class="eyebrow">In call</p>
+						<h2>Conversation live</h2>
+					</div>
+					<span class="call-status-pill">Connected</span>
+				</div>
+
+				<div class="call-summary">
+					<p>
+						You are connected to your peer. Use the controls below to manage the call while the speech
+						stream stays live.
+					</p>
+				</div>
+
+				<div class="button-row call-controls">
+					<button id="muteBtn" class="primary" type="button">Mute</button>
+					<button id="speakerBtn" class="secondary" type="button">Speaker on</button>
+					<button id="endCallBtn" class="danger" type="button">End call</button>
 				</div>
 			</section>
 		</section>

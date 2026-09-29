@@ -22,10 +22,15 @@ export class WebRTCManager {
 		this.audioContext = null;
 		this.offerIceCandidates = [];
 		this.answerIceCandidates = [];
+		this.muted = false;
 	}
 
 	setStatus(message) {
 		this.onStatus(message);
+	}
+
+	setMuted(enabled) {
+		this.muted = enabled;
 	}
 
 	async initWebRTC() {
@@ -110,6 +115,19 @@ export class WebRTCManager {
 
 		channel.onmessage = (event) => {
 			const { data } = event;
+
+			if (typeof data === "string") {
+				try {
+					const message = JSON.parse(data);
+					if (message && message.type === "hangup") {
+						this.handleRemoteHangup(message);
+						return;
+					}
+				} catch (error) {
+					// Ignore non-JSON strings that are not control messages.
+				}
+			}
+
 			if (data instanceof ArrayBuffer) {
 				this.playSnippet(data);
 				return;
@@ -120,6 +138,34 @@ export class WebRTCManager {
 				return;
 			}
 		};
+	}
+
+	handleRemoteHangup(message = {}) {
+		this.setStatus(
+			message.reason === "remote_hangup"
+				? "The other side ended the call."
+				: "The call was ended by the other participant.",
+		);
+
+		this.cleanupPeerConnection();
+	}
+
+	cleanupPeerConnection() {
+		if (this.dataChannel && this.dataChannel.readyState !== "closed") {
+			this.dataChannel.close();
+		}
+
+		if (this.peer && this.peer.connectionState !== "closed") {
+			this.peer.close();
+		}
+
+		this.dataChannel = null;
+		this.peer = null;
+		this.offerIceCandidates = [];
+		this.answerIceCandidates = [];
+		this.generatedOfferToken = "";
+		this.generatedAnswerToken = "";
+		this.muted = false;
 	}
 
 	async sendSnippet(audioBuffer) {
@@ -138,6 +184,10 @@ export class WebRTCManager {
 	}
 
 	playSnippet(audioBuffer) {
+		if (this.muted) {
+			return;
+		}
+
 		const AudioCtor = window.AudioContext || window.webkitAudioContext;
 		if (!AudioCtor) {
 			this.setStatus("This browser does not support Web Audio playback.");
@@ -327,6 +377,34 @@ export class WebRTCManager {
 		);
 		await this.applyCandidates(token.candidates || []);
 		this.setStatus("Answer applied. The call is now connected.");
+		return true;
+	}
+
+	async hangUpCall() {
+		if (!this.peer && !this.dataChannel) {
+			this.setStatus("There is no active call to hang up.");
+			return false;
+		}
+
+		const hangupMessage = JSON.stringify({
+			type: "hangup",
+			reason: "remote_hangup",
+			sentAt: Date.now(),
+		});
+
+		if (this.dataChannel && this.dataChannel.readyState === "open") {
+			try {
+				this.dataChannel.send(hangupMessage);
+			} catch (error) {
+				console.warn(
+					"Could not send hang-up message to the remote peer:",
+					error,
+				);
+			}
+		}
+
+		this.setStatus("Ending the call and closing the connection.");
+		this.cleanupPeerConnection();
 		return true;
 	}
 }

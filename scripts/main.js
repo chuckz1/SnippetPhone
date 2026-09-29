@@ -12,7 +12,7 @@ const state = {
 	fastConnectionManager: null,
 };
 
-// DOM elements for user interaction and status display.
+//not used
 const startMicBtn = document.getElementById("startMicBtn");
 const createOfferBtn = document.getElementById("createOfferBtn");
 const copyOfferBtn = document.getElementById("copyOfferBtn");
@@ -21,8 +21,10 @@ const copyAnswerBtn = document.getElementById("copyAnswerBtn");
 const completeCallBtn = document.getElementById("completeCallBtn");
 const offerInput = document.getElementById("offerInput");
 const answerInput = document.getElementById("answerInput");
-const statusLog = document.getElementById("statusLog");
 const remoteAudio = document.getElementById("remoteAudio");
+
+// DOM elements for user interaction and status display.
+const statusLog = document.getElementById("statusLog");
 const activeUsersList = document.getElementById("activeUsersList");
 const userNameForm = document.getElementById("userNameForm");
 const userNameInput = document.getElementById("currentUserName");
@@ -30,26 +32,64 @@ const userNameDisplay = document.getElementById("currentUserNameDisplay");
 const clearUserNameBtn = document.getElementById("clearUserNameBtn");
 const shareFastTextBtn = document.getElementById("shareFastTextBtn");
 const shareFastEmailBtn = document.getElementById("shareFastEmailBtn");
+const startIntroBtn = document.getElementById("startIntroBtn");
+const muteBtn = document.getElementById("muteBtn");
+const speakerBtn = document.getElementById("speakerBtn");
+const endCallBtn = document.getElementById("endCallBtn");
 
+const step0 = document.getElementById("Step0");
 const step1 = document.getElementById("Step1");
 const step2 = document.getElementById("Step2");
+const step3 = document.getElementById("Step3");
 
 function setStatus(message) {
 	statusLog.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
 }
 
 function setStepVisibility(stepIndex) {
+	step0.hidden = stepIndex !== 0;
 	step1.hidden = stepIndex !== 1;
 	step2.hidden = stepIndex !== 2;
+	step3.hidden = stepIndex !== 3;
 
 	//this switch if for activities that should happen whenever switching to a new step
 	switch (stepIndex) {
+		case 0:
+			// setStatus("Step 0: Introduction.");
+			checkForMicPermission().then((hasPermission) => {
+				if (hasPermission) {
+					setStepVisibility(1); // Move to step 1 if microphone permission is granted
+				}
+			});
+			break;
 		case 1:
-			// setStatus("Step 1: Initialize your username.");
+			//call get username on load
+			if (state.userManager && state.fastConnectionManager) {
+				const savedUserName = state.userManager.getUsername();
+				if (savedUserName) {
+					userNameInput.value = savedUserName;
+					userNameDisplay.textContent = `Username: ${savedUserName}`;
+					state.signal.setUsername(savedUserName);
+
+					setStepVisibility(2);
+				} else if (state.fastConnectionManager.isFastConnection()) {
+					userNameDisplay.textContent = `Username: Temp User`;
+					setStatus("Fast connection detected, but no username is set.");
+					setStepVisibility(2);
+				} else {
+					setStepVisibility(1);
+				}
+			} else {
+				setStatus("User manager or fast connection manager is not available.");
+			}
+
 			break;
 		case 2:
 			// setStatus("Step 2: Connect with peers.");
 			startConnection();
+			break;
+		case 3:
+			// setStatus("Step 3: In-call experience.");
 			break;
 		default:
 			setStatus("Unknown step.");
@@ -219,6 +259,9 @@ async function completeOfferWithAnswer() {
 
 		//stop polling for active users after the offer is completed successfully.
 		state.signal.stopPolling();
+
+		//display step 3
+		setStepVisibility(3);
 	}
 }
 
@@ -317,6 +360,21 @@ function shareFastConnectionVia(methodName) {
 	);
 }
 
+function toggleVad(enabled) {
+	ensureManagers();
+	state.vad.muted(enabled);
+}
+
+function toggleSpeaker(enabled) {
+	ensureManagers();
+	state.webrtc.setMuted(!enabled);
+}
+
+function endCall() {
+	ensureManagers();
+	state.webrtc.hangUpCall();
+}
+
 startMicBtn.addEventListener("click", async () => {
 	await startMicrophone();
 });
@@ -360,11 +418,26 @@ shareFastEmailBtn.addEventListener("click", () => {
 	shareFastConnectionVia("sendFastUrlWithEmail");
 });
 
+startIntroBtn.addEventListener("click", async () => {
+	await requestMicPermission();
+	setStepVisibility(1);
+});
+
+muteBtn.addEventListener("click", async () => {
+	await toggleVad(true);
+});
+
+speakerBtn.addEventListener("click", async () => {
+	await toggleSpeaker(true);
+});
+
+endCallBtn.addEventListener("click", async () => {
+	await endCall();
+});
+
 //#endregion
 
-setStatus(
-	"Ready to start a call. Generate an offer, copy it, transfer it manually, then complete the call with the answer token.",
-);
+//#region Bulk functions
 
 async function startConnection() {
 	if (!window.vad) {
@@ -440,25 +513,39 @@ async function startConnection() {
 	}
 }
 
+async function checkForMicPermission() {
+	try {
+		// Check the current status of the microphone permission
+		const permissionStatus = await navigator.permissions.query({
+			name: "microphone",
+		});
+
+		// Return true only if it has already been explicitly granted
+		return permissionStatus.state === "granted";
+	} catch (error) {
+		console.error("Permissions API not supported or error occurred:", error);
+		return false;
+	}
+}
+
+async function requestMicPermission() {
+	try {
+		const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+		// If we get here, the user granted permission
+		stream.getTracks().forEach((track) => track.stop()); // Stop the tracks immediately
+		return true;
+	} catch (error) {
+		console.error("Microphone permission denied or error occurred:", error);
+		return false;
+	}
+}
+
+//#endregion
+
 // make sure all managers are initialized before proceeding.
 ensureManagers();
 
-//call get username on load
-if (state.userManager && state.fastConnectionManager) {
-	const savedUserName = state.userManager.getUsername();
-	if (savedUserName) {
-		userNameInput.value = savedUserName;
-		userNameDisplay.textContent = `Username: ${savedUserName}`;
-		state.signal.setUsername(savedUserName);
-
-		setStepVisibility(2);
-	} else if (state.fastConnectionManager.isFastConnection()) {
-		userNameDisplay.textContent = `Username: Temp User`;
-		setStatus("Fast connection detected, but no username is set.");
-		setStepVisibility(2);
-	} else {
-		setStepVisibility(1);
-	}
-} else {
-	setStatus("User manager or fast connection manager is not available.");
-}
+setStepVisibility(3);
+setStatus(
+	"Ready to start a call. Generate an offer, copy it, transfer it manually, then complete the call with the answer token.",
+);

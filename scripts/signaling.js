@@ -178,6 +178,8 @@ export class SignalingManager {
 			offer: offerToken,
 		});
 
+		console.log("Sending initial ping: ", params);
+
 		console.log("Initializing signaling with offer token:", offerToken);
 
 		this.loggedIn = true;

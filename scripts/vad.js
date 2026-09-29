@@ -8,6 +8,7 @@ export class VADManager {
 		this.audioContext = null;
 		this.processor = null;
 		this.stream = null;
+		this.muted = false;
 	}
 
 	setStatus(message) {
@@ -57,6 +58,9 @@ export class VADManager {
 				this.onSpeechStart();
 			},
 			onSpeechEnd: (audio) => {
+				if (this.muted) {
+					return;
+				}
 				this.isRunning = false;
 				this.onSpeechEnd(audio);
 			},
@@ -70,17 +74,12 @@ export class VADManager {
 		return this.vad;
 	}
 
-	stop() {
-		if (this.vad) {
+	muted(enabled) {
+		this.muted = enabled;
+		if (this.muted && this.vad) {
 			this.vad.stop();
-			this.vad = null;
+		} else if (!this.muted && this.vad) {
+			this.vad.start();
 		}
-
-		if (this.stream) {
-			this.stream.getTracks().forEach((track) => track.stop());
-			this.stream = null;
-		}
-
-		this.isRunning = false;
 	}
 }

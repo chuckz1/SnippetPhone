@@ -112,6 +112,47 @@ button:active {
 	margin-top: 12px;
 }
 
+.call-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	margin-bottom: 8px;
+}
+
+.call-status-pill {
+	display: inline-flex;
+	align-items: center;
+	padding: 8px 12px;
+	border-radius: 999px;
+	background: rgba(127, 227, 166, 0.12);
+	border: 1px solid rgba(127, 227, 166, 0.45);
+	color: var(--success);
+	font-size: 0.82rem;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.call-summary {
+	margin: 16px 0 4px;
+	padding: 14px 16px;
+	border-radius: 12px;
+	border: 1px solid var(--line);
+	background: rgba(5, 9, 19, 0.9);
+	color: var(--muted);
+	line-height: 1.5;
+}
+
+.call-controls {
+	margin-top: 18px;
+}
+
+.danger {
+	background: linear-gradient(180deg, #ff8f8f 0%, #ef5c5c 100%);
+	color: #180909;
+}
+
 textarea {
 	width: 100%;
 	margin-top: 14px;
