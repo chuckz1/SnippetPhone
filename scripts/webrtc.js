@@ -169,11 +169,13 @@ export class WebRTCManager {
 	cleanupPeerConnection() {
 		console.log("Cleaning up the peer connection.");
 		if (this.dataChannel && this.dataChannel.readyState !== "closed") {
+			console.log("Closing the data channel if it is open.");
 			this.dataChannel.close();
 		}
 		console.log("Data channel cleanup complete.");
 
 		if (this.peer && this.peer.connectionState !== "closed") {
+			console.log("Closing the peer connection if it is open.");
 			this.peer.close();
 		}
 		console.log("peer connection cleanup complete.");
