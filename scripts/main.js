@@ -421,6 +421,7 @@ function toggleSpeaker() {
 
 function endCall() {
 	ensureManagers();
+	console.log("Hanging up the call.");
 	state.webrtc.hangUpCall();
 }
 
@@ -481,6 +482,7 @@ speakerBtn.addEventListener("click", async () => {
 });
 
 endCallBtn.addEventListener("click", async () => {
+	console.log("Ending the call.");
 	await endCall();
 });
 

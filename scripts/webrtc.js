@@ -29,6 +29,7 @@ export class WebRTCManager {
 	}
 
 	setStatus(message) {
+		console.log("Status update:", message);
 		this.onStatus(message);
 	}
 
@@ -399,7 +400,7 @@ export class WebRTCManager {
 			this.setStatus("There is no active call to hang up.");
 			return false;
 		}
-
+		console.log("Preparing to hang up the call.");
 		this.endingCall = true;
 
 		const hangupMessage = JSON.stringify({
@@ -407,7 +408,9 @@ export class WebRTCManager {
 			reason: "remote_hangup",
 			sentAt: Date.now(),
 		});
-
+		console.log(
+			"Sending hang-up message to the remote peer if the data channel is open.",
+		);
 		if (this.dataChannel && this.dataChannel.readyState === "open") {
 			try {
 				this.dataChannel.send(hangupMessage);
@@ -418,6 +421,8 @@ export class WebRTCManager {
 				);
 			}
 		}
+
+		console.log("Hang-up message handling complete.");
 
 		this.setStatus("Ending the call and closing the connection.");
 		this.cleanupPeerConnection();
