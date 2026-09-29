@@ -240,6 +240,7 @@ function ensureManagers() {
 					console.error("Unexpected call termination.");
 				}
 			},
+			decompressAudio: (data) => state.compressionManager.decompress(data),
 		});
 	}
 
