@@ -575,15 +575,6 @@ async function startConnection() {
 	// make sure all managers are initialized before proceeding.
 	ensureManagers();
 
-	// Initialize the Opus encoder for audio compression.
-	try {
-		await state.compression.initEncoder();
-		setStatus("Opus encoder initialized successfully.");
-	} catch (error) {
-		console.error("Failed to initialize Opus encoder:", error);
-		setStatus("Failed to initialize Opus encoder.");
-	}
-
 	// Initialize the VAD (Voice Activity Detection) system.
 	try {
 		await state.vad.initVAD();
