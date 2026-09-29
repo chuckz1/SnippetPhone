@@ -118,13 +118,14 @@ export class CompressionManager {
 			}
 
 			if (this.mode === "downsample-mulaw") {
-				const pcm = this.mulawToPcm16(bytes);
-				// Upsampling is optional — you can play 16k directly.
-				return pcm;
+				return this.mulawToPcm16(bytes);
 			}
 
-			// Raw PCM fallback
-			return new Int16Array(bytes.buffer);
+			return new Int16Array(
+				bytes.buffer,
+				bytes.byteOffset,
+				bytes.byteLength / 2,
+			);
 		} catch (error) {
 			console.error("Decompression failed:", error);
 			this.setStatus("Decompression failed.");

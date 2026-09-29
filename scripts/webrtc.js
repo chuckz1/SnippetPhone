@@ -174,12 +174,14 @@ export class WebRTCManager {
 			}
 
 			if (data instanceof ArrayBuffer) {
-				this.playSnippet(data);
+				this.playSnippet(new Uint8Array(data));
 				return;
 			}
 
 			if (data instanceof Blob) {
-				data.arrayBuffer().then((buffer) => this.playSnippet(buffer));
+				data
+					.arrayBuffer()
+					.then((buffer) => this.playSnippet(new Uint8Array(buffer)));
 				return;
 			}
 		};
@@ -260,7 +262,11 @@ export class WebRTCManager {
 			return false;
 		}
 
-		this.dataChannel.send(audioBuffer);
+		const bytes =
+			audioBuffer instanceof Uint8Array
+				? audioBuffer
+				: new Uint8Array(audioBuffer);
+		this.dataChannel.send(bytes);
 		return true;
 	}
 
@@ -269,7 +275,14 @@ export class WebRTCManager {
 			return;
 		}
 
-		audioBuffer = this.decompressAudio(audioBuffer);
+		const bytes =
+			audioBuffer instanceof Uint8Array
+				? audioBuffer
+				: new Uint8Array(audioBuffer);
+		const pcm = this.decompressAudio(bytes);
+		if (!pcm || pcm.length === 0) {
+			return;
+		}
 
 		const AudioCtor = window.AudioContext || window.webkitAudioContext;
 		if (!AudioCtor) {
@@ -281,9 +294,7 @@ export class WebRTCManager {
 			this.audioContext = new AudioCtor();
 		}
 
-		const pcm = new Int16Array(audioBuffer);
 		const floatData = new Float32Array(pcm.length);
-
 		for (let index = 0; index < pcm.length; index += 1) {
 			floatData[index] = pcm[index] / 32768;
 		}

@@ -271,16 +271,16 @@ function ensureManagers() {
 					`Snippet before compression: ${originalSize} bytes (${Math.round((originalSize / 1024) * 100) / 100} KB)`,
 				);
 
-				// NEW: compress with Opus
-				const opusBytes =
+				//compress
+				const compressedBytes =
 					await state.compressionManager.compressAudio(int16Array);
 
-				if (!opusBytes) {
+				if (!compressedBytes) {
 					setStatus("No compressed audio produced.");
 					return;
 				}
 
-				const compressedSize = opusBytes.length;
+				const compressedSize = compressedBytes.length;
 				const percentReduced =
 					originalSize === 0 ? 0 : (1 - compressedSize / originalSize) * 100;
 				console.log(
@@ -290,8 +290,7 @@ function ensureManagers() {
 					`Compression change: ${percentReduced.toFixed(1)}% smaller`,
 				);
 
-				const buffer = opusBytes.buffer;
-				const sent = await state.webrtc.sendSnippet(buffer);
+				const sent = await state.webrtc.sendSnippet(compressedBytes);
 				if (sent) {
 					setStatus("Speech snippet sent over the WebRTC data channel.");
 				}
