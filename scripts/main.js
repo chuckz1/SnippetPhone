@@ -182,7 +182,7 @@ function ensureManagers() {
 				// Check if the call ended gracefully,
 				if (gracefully) {
 					//check if this was fast connection or a regular call
-					if (state.fastConnectionManager) {
+					if (state.fastConnectionManager.isFastConnection()) {
 						// Close the window
 						window.close();
 					} else {
