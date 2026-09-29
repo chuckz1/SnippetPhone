@@ -165,13 +165,16 @@ export class WebRTCManager {
 	}
 
 	cleanupPeerConnection() {
+		console.log("Cleaning up the peer connection.");
 		if (this.dataChannel && this.dataChannel.readyState !== "closed") {
 			this.dataChannel.close();
 		}
+		console.log("Data channel cleanup complete.");
 
 		if (this.peer && this.peer.connectionState !== "closed") {
 			this.peer.close();
 		}
+		console.log("peer connection cleanup complete.");
 
 		this.dataChannel = null;
 		this.peer = null;
@@ -181,6 +184,7 @@ export class WebRTCManager {
 		this.generatedAnswerToken = "";
 		this.muted = false;
 		this.endingCall = false;
+		console.log("cleanup complete.");
 	}
 
 	async sendSnippet(audioBuffer) {
