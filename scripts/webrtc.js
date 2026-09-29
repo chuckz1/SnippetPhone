@@ -173,6 +173,11 @@ export class WebRTCManager {
 				}
 			}
 
+			console.log(
+				"Received: ",
+				Object.prototype.toString.call(data).slice(8, -1),
+			);
+
 			if (data instanceof ArrayBuffer) {
 				this.playSnippet(data);
 				return;
@@ -259,6 +264,11 @@ export class WebRTCManager {
 			this.setStatus("The data channel is not ready yet.");
 			return false;
 		}
+
+		console.log(
+			"Sending: ",
+			Object.prototype.toString.call(audioBuffer).slice(8, -1),
+		);
 
 		this.dataChannel.send(audioBuffer);
 		return true;
