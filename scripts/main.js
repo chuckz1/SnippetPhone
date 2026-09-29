@@ -3,6 +3,7 @@ import { VADManager } from "./vad.js";
 import { SignalingManager } from "./signaling.js";
 import { UserManager } from "./userManager.js";
 import { FastConnectionManager } from "./fastConnection.js";
+import { CompressionManager } from "./compression.js";
 
 const state = {
 	webrtc: null,
@@ -10,6 +11,7 @@ const state = {
 	signal: null,
 	userManager: null,
 	fastConnectionManager: null,
+	compressionManager: null,
 };
 
 //not used
@@ -187,6 +189,12 @@ function ensureManagers() {
 		});
 	}
 
+	if (!state.compressionManager) {
+		state.compressionManager = new CompressionManager({
+			onStatus: setStatus,
+		});
+	}
+
 	if (!state.webrtc) {
 		state.webrtc = new WebRTCManager({
 			onStatus: setStatus,
@@ -258,7 +266,11 @@ function ensureManagers() {
 				}
 
 				const buffer = int16Array.buffer;
-				const sent = await state.webrtc.sendSnippet(buffer);
+
+				// Compress the audio buffer before sending it over the WebRTC data channel.
+				const compressedBuffer = state.compressionManager.compress(buffer);
+
+				const sent = await state.webrtc.sendSnippet(compressedBuffer);
 				if (sent) {
 					setStatus("Speech snippet sent over the WebRTC data channel.");
 				}
