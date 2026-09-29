@@ -269,9 +269,6 @@ export class WebRTCManager {
 			return;
 		}
 
-		// Decompress the received audio buffer before playback.
-		audioBuffer = this.decompressAudio(audioBuffer);
-
 		const AudioCtor = window.AudioContext || window.webkitAudioContext;
 		if (!AudioCtor) {
 			this.setStatus("This browser does not support Web Audio playback.");
@@ -282,7 +279,9 @@ export class WebRTCManager {
 			this.audioContext = new AudioCtor();
 		}
 
-		const pcm = new Int16Array(audioBuffer);
+		// Decompress the received audio buffer before playback.
+		const pcm = this.decompressAudio(audioBuffer);
+		// const pcm = new Int16Array(decompressedAudioBuffer);
 		const floatData = new Float32Array(pcm.length);
 
 		for (let index = 0; index < pcm.length; index += 1) {
