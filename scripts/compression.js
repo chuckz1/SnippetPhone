@@ -1,5 +1,5 @@
 export class CompressionManager {
-	constructor({ onStatus = () => {}, mode = "mulaw" } = {}) {
+	constructor({ onStatus = () => {}, mode = "none" } = {}) {
 		this.onStatus = onStatus;
 		this.mode = mode; // Default compression mode
 	}
@@ -80,6 +80,7 @@ export class CompressionManager {
 	compress(data) {
 		console.log("Compressing data with mode:", this.mode);
 		if (!data || data.length === 0) {
+			console.log("No data to compress.");
 			return null;
 		}
 
@@ -119,6 +120,7 @@ export class CompressionManager {
 	decompress(data) {
 		console.log("Decompressing data with mode:", this.mode);
 		if (!data || data.length === 0) {
+			console.log("No data to decompress.");
 			return null;
 		}
 
