@@ -545,7 +545,7 @@ async function requestMicPermission() {
 // make sure all managers are initialized before proceeding.
 ensureManagers();
 
-setStepVisibility(3);
+setStepVisibility(0);
 setStatus(
 	"Ready to start a call. Generate an offer, copy it, transfer it manually, then complete the call with the answer token.",
 );
