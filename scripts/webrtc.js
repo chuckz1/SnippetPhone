@@ -36,6 +36,7 @@ export class WebRTCManager {
 	resetManager() {
 		this.cleanupPeerConnection();
 		this.muted = false;
+		this.endingCall = false;
 	}
 
 	toggleMuted() {
@@ -119,11 +120,14 @@ export class WebRTCManager {
 			this.setStatus("Data channel is open. VAD snippets can be sent.");
 
 			this.onCallStarted();
+
+			this.endingCall = false;
 		};
 
 		channel.onclose = () => {
 			this.setStatus("Data channel closed.");
 			this.onCallEnded(this.endingCall);
+			this.endingCall = false;
 		};
 
 		channel.onmessage = (event) => {
@@ -187,7 +191,7 @@ export class WebRTCManager {
 		this.generatedOfferToken = "";
 		this.generatedAnswerToken = "";
 		this.muted = false;
-		this.endingCall = false;
+		// this.endingCall = false;
 		console.log("cleanup complete.");
 	}
 
