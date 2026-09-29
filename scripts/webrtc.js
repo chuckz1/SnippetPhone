@@ -12,11 +12,18 @@ const config = {
 };
 
 export class WebRTCManager {
-	constructor({ onStatus, onRemoteSnippet, onCallStarted, onCallEnded } = {}) {
+	constructor({
+		onStatus,
+		onRemoteSnippet,
+		onCallStarted,
+		onCallEnded,
+		decompressAudio,
+	} = {}) {
 		this.onStatus = onStatus || (() => {});
 		this.onRemoteSnippet = onRemoteSnippet || (() => {});
 		this.onCallStarted = onCallStarted || (() => {});
 		this.onCallEnded = onCallEnded || ((gracefully) => {});
+		this.decompressAudio = decompressAudio || ((data) => data);
 		this.peer = null;
 		this.dataChannel = null;
 		this.generatedOfferToken = "";
@@ -261,6 +268,8 @@ export class WebRTCManager {
 		if (this.muted) {
 			return;
 		}
+
+		audioBuffer = this.decompressAudio(audioBuffer);
 
 		const AudioCtor = window.AudioContext || window.webkitAudioContext;
 		if (!AudioCtor) {

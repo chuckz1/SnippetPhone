@@ -3,6 +3,7 @@ import { VADManager } from "./vad.js";
 import { SignalingManager } from "./signaling.js";
 import { UserManager } from "./userManager.js";
 import { FastConnectionManager } from "./fastConnection.js";
+import { CompressionManager } from "./compression.js";
 
 const state = {
 	webrtc: null,
@@ -10,6 +11,7 @@ const state = {
 	signal: null,
 	userManager: null,
 	fastConnectionManager: null,
+	compressionManager: null,
 };
 
 //not used
@@ -187,6 +189,12 @@ function ensureManagers() {
 		});
 	}
 
+	if (!state.compressionManager) {
+		state.compressionManager = new CompressionManager({
+			onStatus: setStatus,
+		});
+	}
+
 	if (!state.webrtc) {
 		state.webrtc = new WebRTCManager({
 			onStatus: setStatus,
@@ -232,6 +240,7 @@ function ensureManagers() {
 					console.error("Unexpected call termination.");
 				}
 			},
+			decompressAudio: (data) => state.compressionManager.decompressAudio(data),
 		});
 	}
 
@@ -257,7 +266,31 @@ function ensureManagers() {
 					int16Array[index] = Math.round(clamped * 32767);
 				}
 
-				const buffer = int16Array.buffer;
+				const originalSize = int16Array.byteLength;
+				console.log(
+					`Snippet before compression: ${originalSize} bytes (${Math.round((originalSize / 1024) * 100) / 100} KB)`,
+				);
+
+				// NEW: compress with Opus
+				const opusBytes =
+					await state.compressionManager.compressAudio(int16Array);
+
+				if (!opusBytes) {
+					setStatus("No compressed audio produced.");
+					return;
+				}
+
+				const compressedSize = opusBytes.length;
+				const percentReduced =
+					originalSize === 0 ? 0 : (1 - compressedSize / originalSize) * 100;
+				console.log(
+					`Snippet after compression: ${compressedSize} bytes (${Math.round((compressedSize / 1024) * 100) / 100} KB)`,
+				);
+				console.log(
+					`Compression change: ${percentReduced.toFixed(1)}% smaller`,
+				);
+
+				const buffer = opusBytes.buffer;
 				const sent = await state.webrtc.sendSnippet(buffer);
 				if (sent) {
 					setStatus("Speech snippet sent over the WebRTC data channel.");
@@ -542,6 +575,15 @@ async function startConnection() {
 
 	// make sure all managers are initialized before proceeding.
 	ensureManagers();
+
+	// Initialize the Opus encoder for audio compression.
+	try {
+		await state.compression.initEncoder();
+		setStatus("Opus encoder initialized successfully.");
+	} catch (error) {
+		console.error("Failed to initialize Opus encoder:", error);
+		setStatus("Failed to initialize Opus encoder.");
+	}
 
 	// Initialize the VAD (Voice Activity Detection) system.
 	try {
