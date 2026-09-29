@@ -269,7 +269,7 @@ function ensureManagers() {
 				const buffer = int16Array.buffer;
 
 				// Compress the audio buffer before sending it over the WebRTC data channel.
-				const compressedBuffer = state.compressionManager.compress(buffer);
+				const compressedBuffer = state.compressionManager.compress(int16Array);
 
 				const sent = await state.webrtc.sendSnippet(compressedBuffer);
 				if (sent) {

@@ -79,7 +79,7 @@ export class CompressionManager {
 	 */
 	compress(data) {
 		console.log("Compressing data with mode:", this.mode);
-		if (!data || data.length === 0) {
+		if (!data || !data.length || data.length === 0) {
 			console.log("No data to compress.");
 			return null;
 		}
@@ -102,6 +102,7 @@ export class CompressionManager {
 				return new Uint8Array(down.buffer);
 			}
 
+			console.log("Unknown compression mode, sending raw PCM.");
 			this.setStatus("Compression disabled, sending raw PCM.");
 			return new Uint8Array(data.buffer);
 		} catch (error) {
@@ -119,7 +120,7 @@ export class CompressionManager {
 	 */
 	decompress(data) {
 		console.log("Decompressing data with mode:", this.mode);
-		if (!data || data.length === 0) {
+		if (!data || !data.length || data.length === 0) {
 			console.log("No data to decompress.");
 			return null;
 		}
@@ -135,6 +136,7 @@ export class CompressionManager {
 				return pcm; // You can play 16kHz directly
 			}
 
+			console.log("Unknown compression mode, assuming raw PCM.");
 			// Raw PCM fallback
 			return new Int16Array(data.buffer);
 		} catch (error) {
