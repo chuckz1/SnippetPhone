@@ -110,13 +110,13 @@ function setStepVisibility(stepIndex) {
 			}
 
 			break;
+		case 2.5:
+		// setStatus("Step 2.5: Fast connection wait.");
+		// overflow to case 2
 		case 2:
 			// setStatus("Step 2: Connect with peers.");
 			resetAllManagers();
 			startConnection();
-			break;
-		case 2.5:
-			// setStatus("Step 2.5: Fast connection wait.");
 			break;
 		case 3:
 			// setStatus("Step 3: In-call experience.");
