@@ -198,6 +198,11 @@ function ensureManagers() {
 				//stop polling for active users after the offer is completed successfully.
 				state.signal.stopPolling();
 
+				// Unmute the VAD manager when the call starts.
+				if (state.vad) {
+					state.vad.setMuted(false);
+				}
+
 				//display step 3
 				setStepVisibility(3);
 			},
@@ -398,7 +403,7 @@ function shareFastConnectionVia(methodName) {
 
 function toggleVad(enabled) {
 	ensureManagers();
-	state.vad.muted(enabled);
+	state.vad.setMuted(enabled);
 }
 
 function toggleSpeaker(enabled) {

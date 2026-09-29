@@ -8,7 +8,7 @@ export class VADManager {
 		this.audioContext = null;
 		this.processor = null;
 		this.stream = null;
-		this.muted = false;
+		this.muted = true;
 	}
 
 	setStatus(message) {
@@ -21,7 +21,7 @@ export class VADManager {
 		this.audioContext = null;
 		this.processor = null;
 		this.stream = null;
-		this.muted = false;
+		this.muted = true;
 	}
 
 	async startMic() {
@@ -63,6 +63,9 @@ export class VADManager {
 
 		this.vad = await window.vad.MicVAD.new({
 			onSpeechStart: () => {
+				if (this.muted) {
+					return;
+				}
 				this.isRunning = true;
 				this.onSpeechStart();
 			},
@@ -83,7 +86,7 @@ export class VADManager {
 		return this.vad;
 	}
 
-	muted(enabled) {
+	setMuted(enabled) {
 		this.muted = enabled;
 		if (this.muted && this.vad) {
 			this.vad.stop();
