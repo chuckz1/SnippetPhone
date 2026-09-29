@@ -400,6 +400,8 @@ export class WebRTCManager {
 			return false;
 		}
 
+		this.endingCall = true;
+
 		const hangupMessage = JSON.stringify({
 			type: "hangup",
 			reason: "remote_hangup",
