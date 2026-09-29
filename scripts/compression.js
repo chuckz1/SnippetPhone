@@ -150,7 +150,7 @@ export class CompressionManager {
 				const pcmBuf = this.mulawToPcm16(bytes);
 				return {
 					buffer: pcmBuf,
-					sampleRate: 8000, // μ-law is telephone-band
+					sampleRate: 16000, // original PCM
 				};
 			}
 
@@ -159,21 +159,21 @@ export class CompressionManager {
 				const pcmBuf = this.mulawToPcm16(bytes);
 				return {
 					buffer: pcmBuf,
-					sampleRate: 8000, // downsample-mulaw → 8 kHz
+					sampleRate: 16000 / 3, // downsample-mulaw → 5.333 kHz
 				};
 			}
 
 			if (this.mode === "downsample") {
 				return {
 					buffer: buffer,
-					sampleRate: 16000, // downsample factor 3 → 48k → 16k
+					sampleRate: 16000 / 3, // downsample factor 3 → 16khz → 5333 Hz
 				};
 			}
 
 			// RAW PCM (none)
 			return {
 				buffer: buffer,
-				sampleRate: 48000, // original PCM
+				sampleRate: 16000, // original PCM
 			};
 		} catch (error) {
 			console.error("Decompression failed:", error);
