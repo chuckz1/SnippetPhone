@@ -1,5 +1,5 @@
 export class CompressionManager {
-	constructor({ onStatus = () => {}, mode = "downsample" } = {}) {
+	constructor({ onStatus = () => {}, mode = "none" } = {}) {
 		this.onStatus = onStatus;
 		this.mode = mode; // Default compression mode
 	}
@@ -60,13 +60,34 @@ export class CompressionManager {
 		return out.buffer; // return ArrayBuffer
 	}
 
+	applyLowPass(int16) {
+		const out = new Int16Array(int16.length);
+		let prev = 0;
+		const alpha = 0.1; // smoothing factor
+
+		for (let i = 0; i < int16.length; i++) {
+			prev = prev + alpha * (int16[i] - prev);
+			out[i] = prev;
+		}
+
+		return out.buffer; // return ArrayBuffer
+	}
+
 	// ----------------------------------------------------
 	// DOWNSAMPLING (simple factor)
 	// ----------------------------------------------------
 	downsample(int16, factor = 3) {
-		const out = new Int16Array(Math.floor(int16.length / factor));
+		if (!int16 || int16.length === 0) {
+			console.log("No data to downsample.");
+			return null;
+		}
+
+		//apply low-pass filter before downsampling
+		const newInt16 = new Int16Array(this.applyLowPass(int16));
+
+		const out = new Int16Array(Math.floor(newInt16.length / factor));
 		for (let i = 0; i < out.length; i++) {
-			out[i] = int16[i * factor];
+			out[i] = newInt16[i * factor];
 		}
 		return out.buffer; // return ArrayBuffer
 	}
