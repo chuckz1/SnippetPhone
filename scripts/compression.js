@@ -1,5 +1,5 @@
 export class CompressionManager {
-	constructor({ onStatus = () => {}, mode = "downsample" } = {}) {
+	constructor({ onStatus = () => {}, mode = "none" } = {}) {
 		this.onStatus = onStatus;
 		this.encoder = null;
 		this.sampleRate = 16000; // match your VAD / audio pipeline
