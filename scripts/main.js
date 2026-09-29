@@ -41,7 +41,9 @@ const endCallBtn = document.getElementById("endCallBtn");
 const step0 = document.getElementById("Step0");
 const step1 = document.getElementById("Step1");
 const step2 = document.getElementById("Step2");
+const step2_5 = document.getElementById("Step2.5");
 const step3 = document.getElementById("Step3");
+const step4 = document.getElementById("Step4");
 
 function setStatus(message) {
 	statusLog.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
@@ -72,7 +74,9 @@ function setStepVisibility(stepIndex) {
 	step0.hidden = stepIndex !== 0;
 	step1.hidden = stepIndex !== 1;
 	step2.hidden = stepIndex !== 2;
+	step2_5.hidden = stepIndex !== 2.5;
 	step3.hidden = stepIndex !== 3;
+	step4.hidden = stepIndex !== 4;
 
 	//this switch if for activities that should happen whenever switching to a new step
 	switch (stepIndex) {
@@ -97,7 +101,7 @@ function setStepVisibility(stepIndex) {
 				} else if (state.fastConnectionManager.isFastConnection()) {
 					userNameDisplay.textContent = `Username: Temp User`;
 					setStatus("Fast connection detected, but no username is set.");
-					setStepVisibility(2);
+					setStepVisibility(2.5);
 				} else {
 					setStepVisibility(1);
 				}
@@ -111,8 +115,14 @@ function setStepVisibility(stepIndex) {
 			resetAllManagers();
 			startConnection();
 			break;
+		case 2.5:
+			// setStatus("Step 2.5: Fast connection wait.");
+			break;
 		case 3:
 			// setStatus("Step 3: In-call experience.");
+			break;
+		case 4:
+			// setStatus("Step 4: Fast finished.");
 			break;
 		default:
 			setStatus("Unknown step.");
@@ -211,8 +221,8 @@ function ensureManagers() {
 				if (gracefully) {
 					//check if this was fast connection or a regular call
 					if (state.fastConnectionManager.isFastConnection()) {
-						// Close the window
-						window.close();
+						// Show the fast finished panel
+						setStepVisibility(4);
 					} else {
 						updateWebrtcState("hangup");
 

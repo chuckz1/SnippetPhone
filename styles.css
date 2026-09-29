@@ -134,6 +134,18 @@ button:active {
 	text-transform: uppercase;
 }
 
+.waiting-pill {
+	background: rgba(255, 209, 102, 0.12);
+	border-color: rgba(255, 209, 102, 0.45);
+	color: var(--warning);
+}
+
+.finished-pill {
+	background: rgba(127, 227, 166, 0.12);
+	border-color: rgba(127, 227, 166, 0.45);
+	color: var(--success);
+}
+
 .call-summary {
 	margin: 16px 0 4px;
 	padding: 14px 16px;

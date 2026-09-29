@@ -17,6 +17,7 @@
 			</div>
 		</header>
 
+		<!-- Intro panel -->
 		<section id="Step0" hidden>
 			<section class="panel intro-panel">
 				<h2>Welcome to SnippetPhone</h2>
@@ -35,6 +36,7 @@
 			</section>
 		</section>
 
+		<!-- Get current user -->
 		<section id="Step1" hidden>
 
 
@@ -52,6 +54,7 @@
 			</section>
 		</section>
 
+		<!-- Main connection panel -->
 		<section id="Step2" hidden>
 
 			<section class="panel">
@@ -89,6 +92,31 @@
 			</section>
 		</section>
 
+		<!-- Fast wait panel -->
+		<section id="Step2.5" hidden>
+			<section class="panel fast-wait-panel">
+				<div class="call-header">
+					<div>
+						<p class="eyebrow">Fast connection</p>
+						<h2>Waiting for the other user</h2>
+					</div>
+					<span class="call-status-pill waiting-pill">Pending</span>
+				</div>
+
+				<div class="call-summary">
+					<p>
+						Your fast connection is live. Share the link or keep this tab open while the other person joins.
+						This flow waits for the other user instead of showing the normal peer list.
+					</p>
+				</div>
+
+				<div class="button-row call-controls">
+					<button class="secondary" type="button" disabled>Waiting for connection…</button>
+				</div>
+			</section>
+		</section>
+
+		<!-- In call panel -->
 		<section id="Step3" hidden>
 			<section class="panel call-panel">
 				<div class="call-header">
@@ -110,6 +138,30 @@
 					<button id="muteBtn" class="primary" type="button">Mute</button>
 					<button id="speakerBtn" class="secondary" type="button">Speaker on</button>
 					<button id="endCallBtn" class="danger" type="button">End call</button>
+				</div>
+			</section>
+		</section>
+
+		<!-- Fast finished panel -->
+		<section id="Step4" hidden>
+			<section class="panel fast-finished-panel">
+				<div class="call-header">
+					<div>
+						<p class="eyebrow">Fast connection</p>
+						<h2>Call finished</h2>
+					</div>
+					<span class="call-status-pill finished-pill">Ended</span>
+				</div>
+
+				<div class="call-summary">
+					<p>
+						The fast-connection call has ended. This view is for the post-call state and is designed to
+						replace the normal peer-list flow for direct invite users.
+					</p>
+				</div>
+
+				<div class="button-row call-controls">
+					<button id="startAnotherFastLinkBtn" class="primary" type="button">Start another fast call</button>
 				</div>
 			</section>
 		</section>
