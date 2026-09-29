@@ -116,12 +116,8 @@ export class WebRTCManager {
 
 		channel.onopen = () => {
 			this.setStatus("Data channel is open. VAD snippets can be sent.");
-			console.log("Calling the callback for onCallStarted.");
-			try {
-				this.onCallStarted();
-			} catch (error) {
-				console.error("Error occurred in onCallStarted callback:", error);
-			}
+
+			this.onCallStarted();
 		};
 
 		channel.onclose = () => {

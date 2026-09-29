@@ -164,7 +164,7 @@ function ensureManagers() {
 			},
 			onCallStarted: () => {
 				setStatus("Call started successfully.");
-				console.log("Call started, stopping active user polling.");
+
 				//stop polling for active users after the offer is completed successfully.
 				state.signal.stopPolling();
 
