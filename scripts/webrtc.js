@@ -26,11 +26,27 @@ export class WebRTCManager {
 		this.answerIceCandidates = [];
 		this.muted = false;
 		this.endingCall = false;
+		this.hangupAwaitingAck = false;
+		this.hangupAckTimer = null;
 	}
 
 	setStatus(message) {
 		console.log("Status update:", message);
 		this.onStatus(message);
+	}
+
+	sendControlMessage(payload) {
+		if (!this.dataChannel || this.dataChannel.readyState !== "open") {
+			return false;
+		}
+
+		try {
+			this.dataChannel.send(JSON.stringify(payload));
+			return true;
+		} catch (error) {
+			console.warn("Could not send control message:", error);
+			return false;
+		}
 	}
 
 	resetManager() {
@@ -140,6 +156,11 @@ export class WebRTCManager {
 						this.handleRemoteHangup(message);
 						return;
 					}
+
+					if (message && message.type === "hangup_ack") {
+						this.handleHangupAck(message);
+						return;
+					}
 				} catch (error) {
 					// Ignore non-JSON strings that are not control messages.
 				}
@@ -165,13 +186,40 @@ export class WebRTCManager {
 		);
 
 		console.log("Remote requested to hang up the call.");
-
 		this.endingCall = true;
+
+		if (!message.acknowledged) {
+			this.sendControlMessage({
+				type: "hangup_ack",
+				reason: "acknowledged",
+				sentAt: Date.now(),
+			});
+		}
+
+		this.cleanupPeerConnection();
+	}
+
+	handleHangupAck(message = {}) {
+		if (this.hangupAckTimer) {
+			clearTimeout(this.hangupAckTimer);
+			this.hangupAckTimer = null;
+		}
+
+		this.hangupAwaitingAck = false;
+		this.endingCall = true;
+		this.setStatus("The remote side confirmed the hang-up.");
 		this.cleanupPeerConnection();
 	}
 
 	cleanupPeerConnection() {
 		console.log("Cleaning up the peer connection.");
+		if (this.hangupAckTimer) {
+			clearTimeout(this.hangupAckTimer);
+			this.hangupAckTimer = null;
+		}
+
+		this.hangupAwaitingAck = false;
+
 		if (this.dataChannel && this.dataChannel.readyState !== "closed") {
 			console.log("Closing the data channel if it is open.");
 			this.dataChannel.close();
@@ -191,7 +239,6 @@ export class WebRTCManager {
 		this.generatedOfferToken = "";
 		this.generatedAnswerToken = "";
 		this.muted = false;
-		// this.endingCall = false;
 		console.log("cleanup complete.");
 	}
 
@@ -412,32 +459,37 @@ export class WebRTCManager {
 			this.setStatus("There is no active call to hang up.");
 			return false;
 		}
+
 		console.log("Preparing to hang up the call.");
 		this.endingCall = true;
+		this.hangupAwaitingAck = true;
 
-		const hangupMessage = JSON.stringify({
+		this.sendControlMessage({
 			type: "hangup",
 			reason: "remote_hangup",
 			sentAt: Date.now(),
 		});
-		console.log(
-			"Sending hang-up message to the remote peer if the data channel is open.",
+
+		this.setStatus(
+			"Ending the call and waiting for the other side to confirm.",
 		);
-		if (this.dataChannel && this.dataChannel.readyState === "open") {
-			try {
-				this.dataChannel.send(hangupMessage);
-			} catch (error) {
-				console.warn(
-					"Could not send hang-up message to the remote peer:",
-					error,
-				);
-			}
+
+		if (this.hangupAckTimer) {
+			clearTimeout(this.hangupAckTimer);
 		}
 
-		console.log("Hang-up message handling complete.");
+		this.hangupAckTimer = window.setTimeout(() => {
+			if (!this.hangupAwaitingAck) {
+				return;
+			}
 
-		this.setStatus("Ending the call and closing the connection.");
-		this.cleanupPeerConnection();
+			this.hangupAwaitingAck = false;
+			this.setStatus(
+				"The remote side did not confirm the hang-up in time. Closing locally.",
+			);
+			this.cleanupPeerConnection();
+		}, 2000);
+
 		return true;
 	}
 }
