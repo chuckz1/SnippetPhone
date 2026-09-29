@@ -105,8 +105,8 @@
 
 				<div class="call-summary">
 					<p>
-						Your fast connection is live. Share the link or keep this tab open while the other person joins.
-						This flow waits for the other user instead of showing the normal peer list.
+						Your fast connection is live. Keep this tab open while the other person joins. It should take
+						less than a minute.
 					</p>
 				</div>
 
@@ -153,15 +153,17 @@
 					<span class="call-status-pill finished-pill">Ended</span>
 				</div>
 
-				<div class="call-summary">
+				<!-- <div class="call-summary">
 					<p>
 						The fast-connection call has ended. This view is for the post-call state and is designed to
 						replace the normal peer-list flow for direct invite users.
 					</p>
-				</div>
+				</div> -->
 
 				<div class="button-row call-controls">
-					<button id="startAnotherFastLinkBtn" class="primary" type="button">Start another fast call</button>
+					<button id="startAnotherFastLinkBtn" class="primary" type="button"
+						onclick="window.location.href = window.location.origin + window.location.pathname;">Start
+						another call</button>
 				</div>
 			</section>
 		</section>
