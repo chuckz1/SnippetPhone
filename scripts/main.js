@@ -92,16 +92,16 @@ function setStepVisibility(stepIndex) {
 			//call get username on load
 			if (state.userManager && state.fastConnectionManager) {
 				const savedUserName = state.userManager.getUsername();
-				if (savedUserName) {
+				if (state.fastConnectionManager.isFastConnection()) {
+					userNameDisplay.textContent = `Username: Temp User`;
+					setStatus("Fast connection detected, but no username is set.");
+					setStepVisibility(2.5);
+				} else if (savedUserName) {
 					userNameInput.value = savedUserName;
 					userNameDisplay.textContent = `Username: ${savedUserName}`;
 					state.signal.setUsername(savedUserName);
 
 					setStepVisibility(2);
-				} else if (state.fastConnectionManager.isFastConnection()) {
-					userNameDisplay.textContent = `Username: Temp User`;
-					setStatus("Fast connection detected, but no username is set.");
-					setStepVisibility(2.5);
 				} else {
 					setStepVisibility(1);
 				}
@@ -129,8 +129,6 @@ function setStepVisibility(stepIndex) {
 			console.error("Unknown step.");
 	}
 }
-
-function setConnectionStatus(message) {}
 
 /**
  * Render the list of active peers in the UI.
@@ -588,7 +586,6 @@ async function startConnection() {
 		const fastTarget = state.fastConnectionManager.getFastTarget();
 		if (fastTarget) {
 			setStatus(`Fast connection target detected: ${fastTarget}`);
-			// setStepVisibility(2);
 			// You can now use fastTarget to initiate a fast connection
 			state.signal.requestOffer(fastTarget);
 		} else {
