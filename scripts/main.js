@@ -25,6 +25,7 @@ const remoteAudio = document.getElementById("remoteAudio");
 
 // DOM elements for user interaction and status display.
 const statusLog = document.getElementById("statusLog");
+const webrtcStateText = document.getElementById("webrtcStateText");
 const activeUsersList = document.getElementById("activeUsersList");
 const userNameForm = document.getElementById("userNameForm");
 const userNameInput = document.getElementById("currentUserName");
@@ -44,6 +45,27 @@ const step3 = document.getElementById("Step3");
 
 function setStatus(message) {
 	statusLog.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
+}
+
+function updateWebrtcState(stateName, message) {
+	if (!webrtcStateText) {
+		return;
+	}
+
+	const stateMap = {
+		waiting: { emoji: "⏳", label: "Waiting for the other user" },
+		offer: { emoji: "📤", label: "Offering a call" },
+		answering: { emoji: "📥", label: "Answering the call" },
+		connected: { emoji: "✅", label: "Connected" },
+		hangup: { emoji: "📞", label: "Ending the call" },
+	};
+
+	const selectedState = stateMap[stateName] || stateMap.waiting;
+	const emoji = document.querySelector(".state-emoji");
+	if (emoji) {
+		emoji.textContent = selectedState.emoji;
+	}
+	webrtcStateText.textContent = message || selectedState.label;
 }
 
 function setStepVisibility(stepIndex) {
@@ -97,6 +119,8 @@ function setStepVisibility(stepIndex) {
 			console.error("Unknown step.");
 	}
 }
+
+function setConnectionStatus(message) {}
 
 /**
  * Render the list of active peers in the UI.
@@ -269,6 +293,7 @@ async function startMicrophone() {
 
 async function generateOfferToken() {
 	ensureManagers();
+	updateWebrtcState("offer");
 	await state.vad.startMic();
 	state.webrtc.createPeerConnection();
 	const token = await state.webrtc.generateOfferToken();
@@ -279,6 +304,7 @@ async function generateOfferToken() {
 
 async function processIncomingToken() {
 	ensureManagers();
+	updateWebrtcState("answering");
 	await state.vad.startMic();
 	const rawText = offerInput.value.trim();
 	const token = await state.webrtc.processIncomingToken(rawText);
@@ -290,6 +316,7 @@ async function processIncomingToken() {
 
 async function completeOfferWithAnswer() {
 	ensureManagers();
+	updateWebrtcState("connected");
 	const rawText = answerInput.value.trim();
 	if (await state.webrtc.completeOfferWithAnswer(rawText)) {
 		setStatus("Offer completed successfully.");
@@ -425,6 +452,7 @@ function toggleSpeaker() {
 
 function endCall() {
 	ensureManagers();
+	updateWebrtcState("hangup");
 	console.log("Hanging up the call.");
 	state.webrtc.hangUpCall();
 }
@@ -601,6 +629,7 @@ async function requestMicPermission() {
 ensureManagers();
 
 setStepVisibility(0);
+updateWebrtcState("waiting");
 setStatus(
 	"Ready to start a call. Generate an offer, copy it, transfer it manually, then complete the call with the answer token.",
 );
