@@ -240,7 +240,8 @@ function ensureManagers() {
 					console.error("Unexpected call termination.");
 				}
 			},
-			decompressAudio: (data) => state.compressionManager.decompressAudio(data),
+			// decompressAudio: (data) => state.compressionManager.decompressAudio(data),
+			decompressAudio: (data) => data,
 		});
 	}
 
@@ -255,11 +256,13 @@ function ensureManagers() {
 					return;
 				}
 
+				// Ensure the audio chunk is in the correct format for compression.
 				const floatArray =
 					audioChunk instanceof Float32Array
 						? audioChunk
 						: new Float32Array(audioChunk);
 
+				// Convert the float32 array to int16 for compression.
 				const int16Array = new Int16Array(floatArray.length);
 				for (let index = 0; index < floatArray.length; index += 1) {
 					const clamped = Math.max(-1, Math.min(1, floatArray[index]));
@@ -290,7 +293,7 @@ function ensureManagers() {
 					`Compression change: ${percentReduced.toFixed(1)}% smaller`,
 				);
 
-				const sent = await state.webrtc.sendSnippet(compressedBytes);
+				const sent = await state.webrtc.sendSnippet(int16Array.buffer);
 				if (sent) {
 					setStatus("Speech snippet sent over the WebRTC data channel.");
 				}
