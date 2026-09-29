@@ -191,6 +191,7 @@ function ensureManagers() {
 					}
 				} else {
 					//TODO: handle unexpected call termination.
+					console.error("Unexpected call termination.");
 				}
 			},
 		});
