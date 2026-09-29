@@ -88,10 +88,5 @@ export class VADManager {
 
 	setMuted(enabled) {
 		this.muted = enabled;
-		if (this.muted && this.vad) {
-			this.vad.stop();
-		} else if (!this.muted && this.vad) {
-			this.vad.start();
-		}
 	}
 }
