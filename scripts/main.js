@@ -4,7 +4,7 @@ import { SignalingManager } from "./signaling.js";
 import { UserManager } from "./userManager.js";
 import { FastConnectionManager } from "./fastConnection.js";
 import { CompressionManager } from "./compression.js";
-
+//bump
 const state = {
 	webrtc: null,
 	vad: null,
