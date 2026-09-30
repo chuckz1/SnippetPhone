@@ -223,6 +223,13 @@ export class CompressionManager {
 
 			// Fire callback
 			this.onAudioReady(finalBuffer);
+		} else {
+			console.log(
+				"Waiting for more Opus packets. Received:",
+				this._receivedPackets,
+				"Expected:",
+				this.expectedPacketCount,
+			);
 		}
 	}
 }
