@@ -261,13 +261,20 @@ function ensureManagers() {
 						? audioChunk
 						: new Float32Array(audioChunk);
 
-				const int16Array = new Int16Array(floatArray.length);
-				for (let index = 0; index < floatArray.length; index += 1) {
-					const clamped = Math.max(-1, Math.min(1, floatArray[index]));
+				const sourceSampleRate = state.vad?.inputSampleRate || 48000;
+				const normalizedFloatArray = resampleTo16k(
+					floatArray,
+					sourceSampleRate,
+				);
+
+				const int16Array = new Int16Array(normalizedFloatArray.length);
+				for (let index = 0; index < normalizedFloatArray.length; index += 1) {
+					const clamped = Math.max(
+						-1,
+						Math.min(1, normalizedFloatArray[index]),
+					);
 					int16Array[index] = Math.round(clamped * 32767);
 				}
-
-				const buffer = int16Array.buffer;
 
 				console.log("Compressing audio snippet before sending.");
 
@@ -481,6 +488,35 @@ function shareFastConnectionVia(methodName) {
 	setStatus(
 		`Opening ${methodName === "sendFastUrlWithText" ? "text" : "email"} share flow for ${username}.`,
 	);
+}
+
+function resampleTo16k(input, sourceSampleRate = 48000) {
+	const targetSampleRate = 16000;
+	if (!input || input.length === 0 || sourceSampleRate <= 0) {
+		return input;
+	}
+
+	if (sourceSampleRate === targetSampleRate) {
+		return input;
+	}
+
+	const durationSeconds = input.length / sourceSampleRate;
+	const targetLength = Math.max(
+		1,
+		Math.round(durationSeconds * targetSampleRate),
+	);
+	const output = new Float32Array(targetLength);
+
+	for (let i = 0; i < targetLength; i += 1) {
+		const sourceIndex = (i / targetSampleRate) * sourceSampleRate;
+		const index = Math.floor(sourceIndex);
+		const fraction = sourceIndex - index;
+		const left = input[index] ?? input[input.length - 1];
+		const right = input[index + 1] ?? input[input.length - 1];
+		output[i] = left + (right - left) * fraction;
+	}
+
+	return output;
 }
 
 function toggleVad() {
