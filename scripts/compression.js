@@ -189,6 +189,13 @@ export class CompressionManager {
 			audioData.close();
 		};
 
+		console.log(
+			"Waiting for more Opus packets. Received:",
+			this._receivedPackets,
+			"Expected:",
+			this.expectedPacketCount,
+		);
+
 		// Decode the chunk
 		this.decoder.decode(chunk);
 
@@ -197,6 +204,7 @@ export class CompressionManager {
 			this.expectedPacketCount > 0 &&
 			this._receivedPackets >= this.expectedPacketCount
 		) {
+			console.log("All expected Opus packets received. Flushing decoder.");
 			await this.decoder.flush();
 			this.decoder.close();
 
@@ -223,13 +231,6 @@ export class CompressionManager {
 
 			// Fire callback
 			this.onAudioReady(finalBuffer);
-		} else {
-			console.log(
-				"Waiting for more Opus packets. Received:",
-				this._receivedPackets,
-				"Expected:",
-				this.expectedPacketCount,
-			);
 		}
 	}
 }

@@ -277,11 +277,11 @@ function ensureManagers() {
 				console.log("sending compressed audio snippet.");
 
 				//log total packet count
-				console.log("Total number of packets to be sent:", packets.length - 1);
+				console.log("Total number of packets to be sent:", packets.length);
 				// Send the total packet count to the remote side.
 				state.webrtc.sendControlMessage({
 					type: "packetCount",
-					count: packets.length - 1,
+					count: packets.length,
 				});
 
 				// console log total size of the message as bytes
@@ -292,7 +292,7 @@ function ensureManagers() {
 
 				for (let i = 0; i < packets.length; i += 1) {
 					const sent = await state.webrtc.sendSnippet(packets[i]);
-					console.log(`Compressed audio snippet ${i + 1} sent:`, sent);
+					// console.log(`Compressed audio snippet ${i + 1} sent:`, sent);
 				}
 
 				// console.log("Compressed audio snippet sent:", sent);
