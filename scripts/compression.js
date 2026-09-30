@@ -120,13 +120,11 @@ export class CompressionManager {
 			});
 
 			this.onDecodedAudio = (audioData) => {
-				// SAFEST: use the actual PCM plane size
-				const plane = audioData.planes[0];
+				// Allocate the EXACT size needed for PCM output
+				const byteLength = audioData.allocationSize({ planeIndex: 0 });
+				const pcm = new Int16Array(byteLength / 2); // s16 = 2 bytes per sample
 
-				// plane.byteLength is ALWAYS correct
-				const pcm = new Int16Array(plane.byteLength / 2);
-
-				// Now copy safely
+				// Copy interleaved PCM into our buffer
 				audioData.copyTo(pcm, { planeIndex: 0 });
 
 				console.log("Decompression completed");
