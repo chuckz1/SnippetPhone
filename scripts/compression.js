@@ -85,6 +85,7 @@ export class CompressionManager {
 			format: "s16",
 			sampleRate: 16000,
 			numberOfChannels: 1,
+			numberOfFrames: int16Buffer.length,
 			timestamp: performance.now() * 1000,
 			data: int16Buffer,
 		});
