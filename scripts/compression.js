@@ -1,9 +1,11 @@
 export class CompressionManager {
-	constructor({ onStatus = () => {} } = {}) {
+	constructor({ onStatus = () => {}, onAudioReady = () => {} } = {}) {
 		this.onStatus = onStatus;
+		this.onAudioReady = onAudioReady;
 
 		this.encoder = null;
 		this.decoder = null;
+		this.expectedPacketCount = 0;
 
 		this.sampleRate = 48000;
 		this.channels = 1;
@@ -123,68 +125,94 @@ export class CompressionManager {
 		return packets; // array of Uint8Array
 	}
 
+	setExpectedPacketCount(count) {
+		this.expectedPacketCount = count;
+	}
+
 	/**
-	 * Decompress array of Uint8Array Opus packets → Float32Array PCM
+	 * Add a single Opus packet to the decoder.
+	 * Calls onAudioReady() when all packets have been decoded.
 	 *
-	 * @param {Array.<Uint8Array>} encodedPackets - The compressed audio data to decompress.
-	 * @returns {Promise<Float32Array>} - The decompressed PCM audio data.
+	 * @param {Uint8Array} packet - The Opus packet to decode.
 	 */
-	async decompressBatch(encodedPackets) {
+	async addOpusPacket(packet) {
 		if (!this.decoder) {
 			this.setStatus("Decoder not initialized.");
-			return null;
+			return;
 		}
 
-		this.setStatus("Decompression started");
+		// Lazy init decoded chunk storage
+		if (!this._decodedChunks) {
+			this._decodedChunks = [];
+			this._receivedPackets = 0;
+		}
 
-		const pcmChunks = [];
+		// Wrap packet into EncodedAudioChunk
+		const chunk = new EncodedAudioChunk({
+			type: this._receivedPackets === 0 ? "key" : "delta",
+			timestamp: this._receivedPackets * 20000, // 20ms per Opus frame
+			data: packet.buffer.slice(
+				packet.byteOffset,
+				packet.byteOffset + packet.byteLength,
+			),
+		});
 
+		this._receivedPackets++;
+
+		// Capture decoder output
 		this._decodeCallback = (audioData) => {
-			// SAFELY allocate based on actual plane byteLength
-			const plane = audioData.planes[0];
-			const byteLength = plane.byteLength;
+			const frames = audioData.numberOfFrames;
+			const pcm = new Float32Array(frames);
 
-			const float32 = new Float32Array(byteLength / 4); // f32 = 4 bytes
-			audioData.copyTo(float32, {
+			audioData.copyTo(pcm, {
 				planeIndex: 0,
 				frameOffset: 0,
-				frameCount: audioData.numberOfFrames,
+				frameCount: frames,
 			});
 
-			pcmChunks.push(float32);
+			this._decodedChunks.push({
+				pcm,
+				sampleRate: audioData.sampleRate,
+				channels: audioData.numberOfChannels,
+			});
+
 			audioData.close();
 		};
 
-		// Feed packets
-		encodedPackets.forEach((packet, index) => {
-			const chunk = new EncodedAudioChunk({
-				type: index === 0 ? "key" : "delta",
-				data: packet,
-				timestamp: index * 20000,
-			});
+		// Decode the chunk
+		this.decoder.decode(chunk);
 
-			this.decoder.decode(chunk);
-		});
+		// If we know how many packets to expect, check completion
+		if (
+			this.expectedPacketCount > 0 &&
+			this._receivedPackets >= this.expectedPacketCount
+		) {
+			await this.decoder.flush();
+			this.decoder.close();
 
-		await this.decoder.flush();
+			this.setStatus("All Opus packets decoded.");
 
-		this.setStatus("Decompression completed");
+			// Stitch PCM chunks into one AudioBuffer
+			const totalFrames = this._decodedChunks.reduce(
+				(sum, c) => sum + c.pcm.length,
+				0,
+			);
 
-		// Concatenate PCM chunks
-		const totalLength = pcmChunks.reduce((sum, arr) => sum + arr.length, 0);
-		const output = new Float32Array(totalLength);
+			const context = new AudioContext({ sampleRate: this.sampleRate });
+			const finalBuffer = context.createBuffer(
+				this.channels,
+				totalFrames,
+				this.sampleRate,
+			);
 
-		let offset = 0;
-		for (const chunk of pcmChunks) {
-			output.set(chunk, offset);
-			offset += chunk.length;
+			let offset = 0;
+			for (const chunk of this._decodedChunks) {
+				finalBuffer.copyToChannel(chunk.pcm, 0, offset);
+				offset += chunk.pcm.length;
+			}
+
+			// Fire callback
+			this.onAudioReady(finalBuffer);
 		}
-
-		return output; // Float32Array PCM
-	}
-
-	async decompressSingle(encodedPacket) {
-		const result = await this.decompressBatch([encodedPacket]);
-		return result;
 	}
 }

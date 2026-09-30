@@ -190,18 +190,9 @@ export class WebRTCManager {
 					}
 					console.log("here 6");
 
-					// -------------------------------
-					// 2. NEW: Opus batch message
-					// -------------------------------
-					if (message.type === "opus-batch") {
-						console.log("Received Opus batch:", message.packets.length);
-
-						// Each packet is an ArrayBuffer
-						const decodedPCM = await state.compressionManager.decompressBatch(
-							message.packets.map((buf) => new Uint8Array(buf)),
-						);
-
-						this.playSnippet(decodedPCM.buffer);
+					if (message && message.type === "packetCount") {
+						console.log("Expected packet count:", message.count);
+						state.compressionManager.setExpectedPacketCount(message.count);
 						return;
 					}
 
@@ -218,13 +209,11 @@ export class WebRTCManager {
 			}
 
 			// -------------------------------
-			// 3. Raw PCM ArrayBuffer (legacy)
+			// 3. Raw PCM ArrayBuffer
 			// -------------------------------
 			if (data instanceof ArrayBuffer) {
-				const decodedPCM = await state.compressionManager.decompressSingle(
-					new Uint8Array(data),
-				);
-				this.playSnippet(decodedPCM.buffer);
+				//these are individual Opus packets
+				await state.compressionManager.addOpusPacket(new Uint8Array(data));
 				return;
 			}
 
