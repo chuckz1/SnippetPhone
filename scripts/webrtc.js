@@ -156,6 +156,8 @@ export class WebRTCManager {
 		channel.onmessage = async (event) => {
 			const { data } = event;
 
+			console.log("Received data on the data channel:", data);
+
 			// -------------------------------
 			// 1. Control messages
 			// -------------------------------
