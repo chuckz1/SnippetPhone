@@ -7,7 +7,7 @@ export class CompressionManager {
 		this.decoder = null;
 		this.expectedPacketCount = 0;
 
-		this.sampleRate = 48000;
+		this.sampleRate = 16000;
 		this.channels = 1;
 		this.frameSize = 960; // standard Opus frame size
 	}
