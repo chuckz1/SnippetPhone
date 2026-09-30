@@ -157,6 +157,13 @@ export class WebRTCManager {
 			const { data } = event;
 
 			console.log("Received data on the data channel:", data);
+			console.log(
+				"Received data on the data channel (JSON parse attempt):",
+				JSON.parse(data),
+			);
+			console.log("Type of received data:", typeof data);
+			console.log("Is data an ArrayBuffer?", data instanceof ArrayBuffer);
+			console.log("Is data a Blob?", data instanceof Blob);
 
 			// -------------------------------
 			// 1. Control messages
