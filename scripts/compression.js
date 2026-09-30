@@ -60,10 +60,10 @@ export class CompressionManager {
 		return out.buffer; // return ArrayBuffer
 	}
 
-	applyLowPass(int16) {
+	applyLowPass(int16, alpha = 0.1) {
 		const out = new Int16Array(int16.length);
 		let prev = 0;
-		const alpha = 0.1; // smoothing factor
+		// const alpha = 0.1; // smoothing factor
 
 		for (let i = 0; i < int16.length; i++) {
 			prev = prev + alpha * (int16[i] - prev);
@@ -83,7 +83,7 @@ export class CompressionManager {
 		}
 
 		//apply low-pass filter before downsampling
-		const newInt16 = new Int16Array(this.applyLowPass(int16));
+		const newInt16 = new Int16Array(this.applyLowPass(int16, 0.3));
 
 		const out = new Int16Array(Math.floor(newInt16.length / factor));
 		for (let i = 0; i < out.length; i++) {
