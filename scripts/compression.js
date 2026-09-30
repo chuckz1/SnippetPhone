@@ -1,5 +1,5 @@
 export class CompressionManager {
-	constructor({ onStatus = () => {}, mode = "downsample" } = {}) {
+	constructor({ onStatus = () => {}, mode = "downsample-mulaw" } = {}) {
 		this.onStatus = onStatus;
 		this.mode = mode; // Default compression mode
 	}
@@ -114,7 +114,7 @@ export class CompressionManager {
 				compressed = this.pcm16ToMulaw(int16);
 			} else if (this.mode === "downsample-mulaw") {
 				this.setStatus("Compressing with downsample + μ-law.");
-				const downBuf = this.downsample(int16, 3);
+				const downBuf = this.downsample(int16, 2);
 				const down = new Int16Array(downBuf);
 				compressed = this.pcm16ToMulaw(down);
 			} else if (this.mode === "downsample") {
@@ -127,7 +127,7 @@ export class CompressionManager {
 
 			const afterSize = compressed.byteLength;
 			const percentDecrease =
-				beforeSize === 0 ? 0 : ((1 - afterSize / beforeSize) * 100);
+				beforeSize === 0 ? 0 : (1 - afterSize / beforeSize) * 100;
 
 			console.log(
 				`Compression before: ${beforeSize} bytes (${(beforeSize / 1024).toFixed(2)} KB)`,
@@ -173,7 +173,7 @@ export class CompressionManager {
 				const pcmBuf = this.mulawToPcm16(bytes);
 				return {
 					buffer: pcmBuf,
-					sampleRate: 16000 / 3, // downsample-mulaw → 5.333 kHz
+					sampleRate: 16000 / 2, // downsample-mulaw → 8 kHz
 				};
 			}
 
