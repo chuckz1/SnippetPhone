@@ -277,6 +277,12 @@ function ensureManagers() {
 
 				//log total packet count
 				console.log("Total number of packets to be sent:", packets.length);
+				// Send the total packet count to the remote side.
+				state.webrtc.sendControlMessage({
+					type: "packetCount",
+					count: packets.length,
+				});
+
 				// console log total size of the message as bytes
 				console.log(
 					"Total size of the message to be sent:",
