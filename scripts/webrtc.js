@@ -153,9 +153,12 @@ export class WebRTCManager {
 			this.endingCall = false;
 		};
 
-		channel.onmessage = (event) => {
+		channel.onmessage = async (event) => {
 			const { data } = event;
 
+			// -------------------------------
+			// 1. Control messages
+			// -------------------------------
 			if (typeof data === "string") {
 				try {
 					const message = JSON.parse(data);
@@ -168,16 +171,37 @@ export class WebRTCManager {
 						this.handleHangupAck(message);
 						return;
 					}
+
+					// -------------------------------
+					// 2. NEW: Opus batch message
+					// -------------------------------
+					if (message.type === "opus-batch") {
+						console.log("Received Opus batch:", message.packets.length);
+
+						// Each packet is an ArrayBuffer
+						const decodedPCM = await state.compressionManager.decompress(
+							message.packets.map((buf) => new Uint8Array(buf)),
+						);
+
+						this.playSnippet(decodedPCM.buffer);
+						return;
+					}
 				} catch (error) {
 					// Ignore non-JSON strings that are not control messages.
 				}
 			}
 
+			// -------------------------------
+			// 3. Raw PCM ArrayBuffer (legacy)
+			// -------------------------------
 			if (data instanceof ArrayBuffer) {
 				this.playSnippet(data);
 				return;
 			}
 
+			// -------------------------------
+			// 4. Raw PCM Blob (legacy)
+			// -------------------------------
 			if (data instanceof Blob) {
 				data.arrayBuffer().then((buffer) => this.playSnippet(buffer));
 				return;
@@ -279,10 +303,10 @@ export class WebRTCManager {
 			this.audioContext = new AudioCtor();
 		}
 
-		// Decompress the received audio buffer before playback.
-		const pcmBuffer = await this.decompressAudio(audioBuffer);
+		// // Decompress the received audio buffer before playback.
+		// const pcmBuffer = await this.decompressAudio(audioBuffer);
 
-		const pcm = new Int16Array(pcmBuffer);
+		const pcm = new Int16Array(audioBuffer);
 		const floatData = new Float32Array(pcm.length);
 
 		for (let index = 0; index < pcm.length; index += 1) {

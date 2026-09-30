@@ -269,13 +269,18 @@ function ensureManagers() {
 				const buffer = int16Array.buffer;
 
 				// Compress the audio buffer before sending it over the WebRTC data channel.
-				const compressedBuffer =
-					await state.compressionManager.compress(int16Array);
+				const packets = await state.compressionManager.compress(int16Array);
 
-				const sent = await state.webrtc.sendSnippet(compressedBuffer);
-				if (sent) {
-					setStatus("Speech snippet sent over the WebRTC data channel.");
-				}
+				// group all the packets together before sending
+				await state.webrtc.sendSnippet({
+					type: "opus-batch",
+					packets: packets.map((p) => p.buffer),
+				});
+
+				// const sent = await state.webrtc.sendSnippet(compressedBuffer);
+				// if (sent) {
+				// 	setStatus("Speech snippet sent over the WebRTC data channel.");
+				// }
 			},
 		});
 	}
