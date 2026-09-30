@@ -287,7 +287,7 @@ function ensureManagers() {
 				);
 
 				// group all the packets together before sending
-				const sent = await state.webrtc.sendSnippet(message);
+				const sent = await state.webrtc.sendSnippet(JSON.stringify(message));
 
 				console.log("Compressed audio snippet sent:", sent);
 

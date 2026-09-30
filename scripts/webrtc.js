@@ -164,23 +164,31 @@ export class WebRTCManager {
 			console.log("Type of received data:", typeof data);
 			console.log("Is data an ArrayBuffer?", data instanceof ArrayBuffer);
 			console.log("Is data a Blob?", data instanceof Blob);
+			console.log("Is data a true string?", typeof data === "string");
+			console.log("Is data a String?", typeof data == "string");
 
 			// -------------------------------
 			// 1. Control messages
 			// -------------------------------
 			if (typeof data === "string") {
+				console.log("here 1");
 				try {
+					console.log("here 2");
 					const message = JSON.parse(data);
+					console.log("here 3");
 					console.log("Received control message:", message);
+					console.log("here 4");
 					if (message && message.type === "hangup") {
 						this.handleRemoteHangup(message);
 						return;
 					}
+					console.log("here 5");
 
 					if (message && message.type === "hangup_ack") {
 						this.handleHangupAck(message);
 						return;
 					}
+					console.log("here 6");
 
 					// -------------------------------
 					// 2. NEW: Opus batch message
@@ -202,6 +210,9 @@ export class WebRTCManager {
 						message,
 					);
 				} catch (error) {
+					console.error("Failed to parse data channel message as JSON:", error);
+					// print the raw data for debugging purposes
+					console.error("Raw data that failed to parse:", data);
 					// Ignore non-JSON strings that are not control messages.
 				}
 			}
