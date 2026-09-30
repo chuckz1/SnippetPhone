@@ -129,7 +129,7 @@ export class CompressionManager {
 	 * @param {Array.<Uint8Array>} encodedPackets - The compressed audio data to decompress.
 	 * @returns {Promise<Float32Array>} - The decompressed PCM audio data.
 	 */
-	async decompress(encodedPackets) {
+	async decompressBatch(encodedPackets) {
 		if (!this.decoder) {
 			this.setStatus("Decoder not initialized.");
 			return null;
@@ -181,5 +181,10 @@ export class CompressionManager {
 		}
 
 		return output; // Float32Array PCM
+	}
+
+	async decompressSingle(encodedPacket) {
+		const result = await this.decompressBatch([encodedPacket]);
+		return result;
 	}
 }

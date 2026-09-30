@@ -197,7 +197,7 @@ export class WebRTCManager {
 						console.log("Received Opus batch:", message.packets.length);
 
 						// Each packet is an ArrayBuffer
-						const decodedPCM = await state.compressionManager.decompress(
+						const decodedPCM = await state.compressionManager.decompressBatch(
 							message.packets.map((buf) => new Uint8Array(buf)),
 						);
 
@@ -221,7 +221,10 @@ export class WebRTCManager {
 			// 3. Raw PCM ArrayBuffer (legacy)
 			// -------------------------------
 			if (data instanceof ArrayBuffer) {
-				this.playSnippet(data);
+				const decodedPCM = await state.compressionManager.decompressSingle(
+					new Uint8Array(data),
+				);
+				this.playSnippet(decodedPCM.buffer);
 				return;
 			}
 
