@@ -40,7 +40,12 @@ export class VADManager {
 			const audioTrack = stream.getAudioTracks()[0];
 			const settings = audioTrack?.getSettings?.() || {};
 			this.inputSampleRate = settings.sampleRate || 48000;
-			console.log("Input sample rate set to:", this.inputSampleRate);
+			console.log(
+				"Input sample rate set to:",
+				settings.sampleRate,
+				"Effective inputSampleRate:",
+				this.inputSampleRate,
+			);
 			this.setStatus("Microphone access granted.");
 			return stream;
 		} catch (error) {

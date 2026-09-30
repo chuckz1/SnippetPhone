@@ -6,6 +6,9 @@ export class CompressionManager {
 		this.encoder = null;
 		this.decoder = null;
 		this.expectedPacketCount = 0;
+		this._decodedChunks = [];
+		this._receivedPackets = 0;
+		this._decodeCallback = null;
 
 		this.sampleRate = 16000;
 		this.channels = 1;
@@ -19,6 +22,27 @@ export class CompressionManager {
 	 */
 	setStatus(message) {
 		this.onStatus(message);
+	}
+
+	createDecoder() {
+		if (this.decoder && this.decoder.state !== "closed") {
+			this.decoder.close();
+		}
+
+		this.decoder = new AudioDecoder({
+			output: (audioData) => {
+				if (this._decodeCallback) {
+					this._decodeCallback(audioData);
+				}
+			},
+			error: (e) => console.error("Decoder error:", e),
+		});
+
+		this.decoder.configure({
+			codec: "opus",
+			sampleRate: this.sampleRate,
+			numberOfChannels: this.channels,
+		});
 	}
 
 	/**
@@ -54,20 +78,7 @@ export class CompressionManager {
 		// -----------------------
 		// DECODER
 		// -----------------------
-		this.decoder = new AudioDecoder({
-			output: (audioData) => {
-				if (this._decodeCallback) {
-					this._decodeCallback(audioData);
-				}
-			},
-			error: (e) => console.error("Decoder error:", e),
-		});
-
-		this.decoder.configure({
-			codec: "opus",
-			sampleRate: this.sampleRate,
-			numberOfChannels: this.channels,
-		});
+		this.createDecoder();
 
 		this.setStatus("Opus encoder/decoder ready.");
 	}
@@ -147,8 +158,7 @@ export class CompressionManager {
 	 */
 	async _addOpusPacket(packet) {
 		if (!this.decoder) {
-			this.setStatus("Decoder not initialized.");
-			return;
+			this.createDecoder();
 		}
 
 		// Lazy init decoded chunk storage
@@ -230,6 +240,14 @@ export class CompressionManager {
 			}
 
 			console.log("Final AudioBuffer created with total frames:", totalFrames);
+
+			// Reset state for the next snippet so a later packet batch does not reuse
+			// closed decoder state or stale packet totals.
+			this._decodedChunks = [];
+			this._receivedPackets = 0;
+			this.expectedPacketCount = 0;
+			this._decodeCallback = null;
+			this.createDecoder();
 
 			// Fire callback
 			this.onAudioReady(finalBuffer);
