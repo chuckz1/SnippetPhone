@@ -33,12 +33,16 @@ export class VADManager {
 
 		try {
 			const stream = await navigator.mediaDevices.getUserMedia({
-				audio: true,
+				audio: {
+					sampleRate: 48000,
+					channelCount: 1,
+				},
 				video: false,
 			});
 			this.stream = stream;
 			const audioTrack = stream.getAudioTracks()[0];
 			const settings = audioTrack?.getSettings?.() || {};
+			console.log("Audio track settings:", settings);
 			this.inputSampleRate = settings.sampleRate || 48000;
 			console.log(
 				"Input sample rate set to:",
