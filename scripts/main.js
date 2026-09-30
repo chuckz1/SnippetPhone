@@ -556,6 +556,15 @@ async function startConnection() {
 	// make sure all managers are initialized before proceeding.
 	ensureManagers();
 
+	// Initialize the compression manager if it exists.
+	try {
+		if (state.compressionManager) {
+			state.compressionManager.initialize();
+		}
+	} catch (error) {
+		console.error("Failed to initialize compression manager:", error);
+	}
+
 	// Initialize the VAD (Voice Activity Detection) system.
 	try {
 		await state.vad.initVAD();

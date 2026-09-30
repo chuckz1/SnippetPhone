@@ -13,6 +13,14 @@ export class CompressionManager {
 	}
 
 	/**
+	 * Initialize the compression manager.
+	 */
+	initialize() {
+		// Any initialization logic for the compression manager can go here
+		console.log("CompressionManager initialized");
+	}
+
+	/**
 	 * Compress the given data.
 	 *
 	 * @param {any} data - The data to compress.
