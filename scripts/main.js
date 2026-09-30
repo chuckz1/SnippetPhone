@@ -275,21 +275,28 @@ function ensureManagers() {
 
 				console.log("sending compressed audio snippet.");
 
-				const message = {
-					type: "opus-batch",
-					packets: packets.map((p) => p.buffer),
-				};
+				//log total packet count
+				console.log("Total number of packets to be sent:", packets.length);
+
+				// const message = {
+				// 	type: "opus-batch",
+				// 	packets: packets.map((p) => p.buffer),
+				// };
 
 				//console log total size of the message as bytes
-				console.log(
-					"Total size of the message to be sent:",
-					message.packets.reduce((acc, buf) => acc + buf.byteLength, 0),
-				);
+				// console.log(
+				// 	"Total size of the message to be sent:",
+				// 	message.packets.reduce((acc, buf) => acc + buf.byteLength, 0),
+				// );
 
 				// group all the packets together before sending
-				const sent = await state.webrtc.sendSnippet(JSON.stringify(message));
+				// const sent = await state.webrtc.sendSnippet(JSON.stringify(message));
+				for (let i = 0; i < packets.length; i += 1) {
+					const sent = await state.webrtc.sendSnippet(packets[i]);
+					console.log(`Compressed audio snippet ${i + 1} sent:`, sent);
+				}
 
-				console.log("Compressed audio snippet sent:", sent);
+				// console.log("Compressed audio snippet sent:", sent);
 
 				// const sent = await state.webrtc.sendSnippet(compressedBuffer);
 				if (sent) {
