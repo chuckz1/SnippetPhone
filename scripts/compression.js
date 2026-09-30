@@ -1,5 +1,5 @@
 export class CompressionManager {
-	constructor({ onStatus = () => {}, mode = "downsample-mulaw" } = {}) {
+	constructor({ onStatus = () => {}, mode = "downsample" } = {}) {
 		this.onStatus = onStatus;
 		this.mode = mode; // Default compression mode
 	}
@@ -103,29 +103,43 @@ export class CompressionManager {
 			return null;
 		}
 
+		const beforeSize = buffer.byteLength;
+
 		try {
 			const int16 = new Int16Array(buffer);
 
+			let compressed;
 			if (this.mode === "mulaw") {
 				this.setStatus("Compressing with μ-law.");
-				return this.pcm16ToMulaw(int16);
-			}
-
-			if (this.mode === "downsample-mulaw") {
+				compressed = this.pcm16ToMulaw(int16);
+			} else if (this.mode === "downsample-mulaw") {
 				this.setStatus("Compressing with downsample + μ-law.");
 				const downBuf = this.downsample(int16, 3);
 				const down = new Int16Array(downBuf);
-				return this.pcm16ToMulaw(down);
-			}
-
-			if (this.mode === "downsample") {
+				compressed = this.pcm16ToMulaw(down);
+			} else if (this.mode === "downsample") {
 				this.setStatus("Compressing with downsample.");
-				return this.downsample(int16, 3);
+				compressed = this.downsample(int16, 3);
+			} else {
+				this.setStatus("Compression disabled, sending raw PCM.");
+				compressed = buffer;
 			}
 
-			// RAW PCM (none)
-			this.setStatus("Compression disabled, sending raw PCM.");
-			return buffer;
+			const afterSize = compressed.byteLength;
+			const percentDecrease =
+				beforeSize === 0 ? 0 : ((1 - afterSize / beforeSize) * 100);
+
+			console.log(
+				`Compression before: ${beforeSize} bytes (${(beforeSize / 1024).toFixed(2)} KB)`,
+			);
+			console.log(
+				`Compression after: ${afterSize} bytes (${(afterSize / 1024).toFixed(2)} KB)`,
+			);
+			console.log(
+				`Compression decrease: ${percentDecrease.toFixed(1)}% smaller`,
+			);
+
+			return compressed;
 		} catch (error) {
 			console.error("Compression failed:", error);
 			this.setStatus("Compression failed, sending raw PCM.");
