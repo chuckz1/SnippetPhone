@@ -111,6 +111,7 @@ export class CompressionManager {
 	 */
 	async decompress(encodedBuffer) {
 		console.log("Decompression started");
+
 		return new Promise((resolve) => {
 			const chunk = new EncodedAudioChunk({
 				type: "key",
@@ -119,8 +120,15 @@ export class CompressionManager {
 			});
 
 			this.onDecodedAudio = (audioData) => {
-				const pcm = new Int16Array(audioData.numberOfFrames);
+				// SAFEST: use the actual PCM plane size
+				const plane = audioData.planes[0];
+
+				// plane.byteLength is ALWAYS correct
+				const pcm = new Int16Array(plane.byteLength / 2);
+
+				// Now copy safely
 				audioData.copyTo(pcm, { planeIndex: 0 });
+
 				console.log("Decompression completed");
 				resolve(pcm.buffer);
 			};
