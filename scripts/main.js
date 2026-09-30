@@ -261,7 +261,7 @@ function ensureManagers() {
 						? audioChunk
 						: new Float32Array(audioChunk);
 
-				const sourceSampleRate = state.vad?.inputSampleRate || 48000;
+				const sourceSampleRate = 16000; //state.vad.inputSampleRate;
 				const normalizedFloatArray = resampleTo16k(
 					floatArray,
 					sourceSampleRate,
