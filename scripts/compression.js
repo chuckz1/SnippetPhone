@@ -1,5 +1,5 @@
 export class CompressionManager {
-	constructor({ onStatus = () => {}, mode = "none" } = {}) {
+	constructor({ onStatus = () => {}, mode = "mulaw" } = {}) {
 		this.onStatus = onStatus;
 		this.mode = mode; // Default compression mode
 	}
