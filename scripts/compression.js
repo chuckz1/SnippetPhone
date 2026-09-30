@@ -1,6 +1,11 @@
 export class CompressionManager {
 	constructor({ onStatus = () => {} } = {}) {
 		this.onStatus = onStatus;
+		this.initPromise = null;
+		this.encoder = null;
+		this.decoder = null;
+		this.onEncodedChunk = null;
+		this.onDecodedAudio = null;
 	}
 
 	/**
@@ -15,39 +20,111 @@ export class CompressionManager {
 	/**
 	 * Initialize the compression manager.
 	 */
-	initialize() {
+	async initialize() {
 		// Any initialization logic for the compression manager can go here
 		console.log("CompressionManager initialized");
+		if (this.initPromise) return this.initPromise;
+
+		this.initPromise = new Promise(async (resolve, reject) => {
+			try {
+				this.encoder = new AudioEncoder({
+					output: (chunk) => {
+						// chunk is an EncodedAudioChunk
+						if (this.onEncodedChunk) {
+							this.onEncodedChunk(chunk);
+						}
+					},
+					error: (e) => console.error("Encoder error:", e),
+				});
+
+				this.decoder = new AudioDecoder({
+					output: (audioData) => {
+						if (this.onDecodedAudio) {
+							this.onDecodedAudio(audioData);
+						}
+					},
+					error: (e) => console.error("Decoder error:", e),
+				});
+
+				this.encoder.configure({
+					codec: "opus",
+					sampleRate: 16000,
+					numberOfChannels: 1,
+					bitrate: 24000, // good for voice
+				});
+
+				this.decoder.configure({
+					codec: "opus",
+					sampleRate: 16000,
+					numberOfChannels: 1,
+				});
+
+				this.setStatus("WebCodecs Opus encoder/decoder ready.");
+				resolve();
+			} catch (err) {
+				console.error("WebCodecs init failed:", err);
+				reject(err);
+			}
+		});
+
+		return this.initPromise;
 	}
 
 	/**
 	 * Compress the given data.
 	 *
-	 * @param {any} data - The data to compress.
-	 * @returns {any} - The compressed data.
+	 * @param {Int16Array} int16Buffer - The PCM audio data to compress.
+	 * @returns {Promise<ArrayBuffer>} - The compressed audio data.
 	 */
-	compress(data) {
-		// Implement compression logic here
+	async compress(int16Buffer) {
+		if (!this.encoder) return null;
+
 		console.log("Compression started");
-		// Simulate compression process
-		const compressedData = data; // Replace with actual compression
-		console.log("Compression completed");
-		return compressedData;
+
+		const audioData = new AudioData({
+			format: "s16",
+			sampleRate: 16000,
+			numberOfChannels: 1,
+			timestamp: performance.now() * 1000,
+			data: int16Buffer,
+		});
+
+		return new Promise((resolve) => {
+			this.onEncodedChunk = (chunk) => {
+				// Convert EncodedAudioChunk → ArrayBuffer
+				const raw = new Uint8Array(chunk.byteLength);
+				chunk.copyTo(raw);
+				console.log("Compression completed");
+				resolve(raw.buffer);
+			};
+
+			this.encoder.encode(audioData);
+		});
 	}
 
 	/**
 	 * Decompress the given data.
 	 *
-	 * @param {any} data - The data to decompress.
-	 * @returns {any} - The decompressed data.
+	 * @param {ArrayBuffer} encodedBuffer - The compressed audio data to decompress.
+	 * @returns {Promise<ArrayBuffer>} - The decompressed PCM audio data.
 	 */
-	decompress(data) {
-		// Implement decompression logic here
+	async decompress(encodedBuffer) {
 		console.log("Decompression started");
+		return new Promise((resolve) => {
+			const chunk = new EncodedAudioChunk({
+				type: "key",
+				timestamp: performance.now() * 1000,
+				data: new Uint8Array(encodedBuffer),
+			});
 
-		// Simulate decompression process
-		const decompressedData = data; // Replace with actual decompression
-		console.log("Decompression completed");
-		return decompressedData;
+			this.onDecodedAudio = (audioData) => {
+				const pcm = new Int16Array(audioData.numberOfFrames);
+				audioData.copyTo(pcm, { planeIndex: 0 });
+				console.log("Decompression completed");
+				resolve(pcm.buffer);
+			};
+
+			this.decoder.decode(chunk);
+		});
 	}
 }

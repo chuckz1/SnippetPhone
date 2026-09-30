@@ -264,13 +264,10 @@ export class WebRTCManager {
 		return true;
 	}
 
-	playSnippet(audioBuffer) {
+	async playSnippet(audioBuffer) {
 		if (this.muted) {
 			return;
 		}
-
-		// Decompress the received audio buffer before playback.
-		audioBuffer = this.decompressAudio(audioBuffer);
 
 		const AudioCtor = window.AudioContext || window.webkitAudioContext;
 		if (!AudioCtor) {
@@ -282,7 +279,10 @@ export class WebRTCManager {
 			this.audioContext = new AudioCtor();
 		}
 
-		const pcm = new Int16Array(audioBuffer);
+		// Decompress the received audio buffer before playback.
+		const pcmBuffer = await this.decompressAudio(audioBuffer);
+
+		const pcm = new Int16Array(pcmBuffer);
 		const floatData = new Float32Array(pcm.length);
 
 		for (let index = 0; index < pcm.length; index += 1) {

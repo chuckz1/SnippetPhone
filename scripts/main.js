@@ -269,7 +269,8 @@ function ensureManagers() {
 				const buffer = int16Array.buffer;
 
 				// Compress the audio buffer before sending it over the WebRTC data channel.
-				const compressedBuffer = state.compressionManager.compress(buffer);
+				const compressedBuffer =
+					await state.compressionManager.compress(int16Array);
 
 				const sent = await state.webrtc.sendSnippet(compressedBuffer);
 				if (sent) {
@@ -558,9 +559,8 @@ async function startConnection() {
 
 	// Initialize the compression manager if it exists.
 	try {
-		if (state.compressionManager) {
-			state.compressionManager.initialize();
-		}
+		await state.compressionManager.initialize();
+		setStatus("Compression manager initialized successfully.");
 	} catch (error) {
 		console.error("Failed to initialize compression manager:", error);
 	}
