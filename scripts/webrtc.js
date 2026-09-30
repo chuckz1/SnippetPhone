@@ -188,6 +188,11 @@ export class WebRTCManager {
 						this.playSnippet(decodedPCM.buffer);
 						return;
 					}
+
+					console.log(
+						"Received unknown message type on the data channel:",
+						message,
+					);
 				} catch (error) {
 					// Ignore non-JSON strings that are not control messages.
 				}
