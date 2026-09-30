@@ -292,45 +292,6 @@ export class WebRTCManager {
 		return true;
 	}
 
-	async playSnippet(audioBuffer) {
-		if (this.muted) {
-			return;
-		}
-
-		const AudioCtor = window.AudioContext || window.webkitAudioContext;
-		if (!AudioCtor) {
-			this.setStatus("This browser does not support Web Audio playback.");
-			return;
-		}
-
-		if (!this.audioContext) {
-			this.audioContext = new AudioCtor();
-		}
-
-		// // Decompress the received audio buffer before playback.
-		// const pcmBuffer = await this.decompressAudio(audioBuffer);
-
-		const pcm = new Int16Array(audioBuffer);
-		const floatData = new Float32Array(pcm.length);
-
-		for (let index = 0; index < pcm.length; index += 1) {
-			floatData[index] = pcm[index] / 32768;
-		}
-
-		const audioBufferObject = this.audioContext.createBuffer(
-			1,
-			floatData.length,
-			16000,
-		);
-		audioBufferObject.getChannelData(0).set(floatData);
-
-		const source = this.audioContext.createBufferSource();
-		source.buffer = audioBufferObject;
-		source.connect(this.audioContext.destination);
-		source.start();
-		this.onRemoteSnippet(audioBufferObject);
-	}
-
 	waitForIceGathering() {
 		return new Promise((resolve) => {
 			const peer = this.peer;

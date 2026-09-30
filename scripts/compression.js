@@ -229,8 +229,56 @@ export class CompressionManager {
 				offset += chunk.pcm.length;
 			}
 
+			console.log("Final AudioBuffer created with total frames:", totalFrames);
+
 			// Fire callback
 			this.onAudioReady(finalBuffer);
+			this.playSnippet(finalBuffer);
 		}
+	}
+
+	/**
+	 * Play a decoded snippet from the remote peer.
+	 *
+	 * The decoder already produces a valid AudioBuffer of floating-point PCM. Converting
+	 * the AudioBuffer object itself into an Int16Array produces all-zero data, which is why
+	 * the snippet sounds silent even though the Opus packets decode successfully.
+	 *
+	 * @param {AudioBuffer} audioBuffer - Decoded PCM audio ready to play.
+	 */
+	async playSnippet(audioBuffer) {
+		if (this.muted) {
+			return;
+		}
+
+		const AudioCtor = window.AudioContext || window.webkitAudioContext;
+		if (!AudioCtor) {
+			this.setStatus("This browser does not support Web Audio playback.");
+			return;
+		}
+
+		if (!this.audioContext) {
+			this.audioContext = new AudioCtor();
+		}
+
+		if (this.audioContext.state === "suspended") {
+			await this.audioContext.resume();
+		}
+
+		const channelData = audioBuffer.getChannelData(0);
+		const sampleRate = audioBuffer.sampleRate || this.sampleRate;
+		const audioBufferObject = this.audioContext.createBuffer(
+			1,
+			channelData.length,
+			sampleRate,
+		);
+		audioBufferObject.getChannelData(0).set(channelData);
+
+		console.log("Playing snippet with length:", channelData.length);
+
+		const source = this.audioContext.createBufferSource();
+		source.buffer = audioBufferObject;
+		source.connect(this.audioContext.destination);
+		source.start();
 	}
 }
