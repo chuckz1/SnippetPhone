@@ -164,6 +164,7 @@ export class WebRTCManager {
 			if (typeof data === "string") {
 				try {
 					const message = JSON.parse(data);
+					console.log("Received control message:", message);
 					if (message && message.type === "hangup") {
 						this.handleRemoteHangup(message);
 						return;
