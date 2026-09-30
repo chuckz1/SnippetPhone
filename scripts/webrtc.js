@@ -23,7 +23,7 @@ export class WebRTCManager {
 		this.onRemoteSnippet = onRemoteSnippet || (() => {});
 		this.onCallStarted = onCallStarted || (() => {});
 		this.onCallEnded = onCallEnded || ((gracefully) => {});
-		this.decompressAudio = decompressAudio || ((data) => data);
+		this.decompressAudio = decompressAudio || ((type, data) => data);
 		this.peer = null;
 		this.dataChannel = null;
 		this.generatedOfferToken = "";
@@ -156,43 +156,28 @@ export class WebRTCManager {
 		channel.onmessage = async (event) => {
 			const { data } = event;
 
-			console.log("Received data on the data channel:", data);
-			// console.log(
-			// 	"Received data on the data channel (JSON parse attempt):",
-			// 	JSON.parse(data),
-			// );
-			console.log("Type of received data:", typeof data);
-			console.log("Is data an ArrayBuffer?", data instanceof ArrayBuffer);
-			console.log("Is data a Blob?", data instanceof Blob);
-			console.log("Is data a true string?", typeof data === "string");
-			console.log("Is data a String?", typeof data == "string");
-
 			// -------------------------------
 			// 1. Control messages
 			// -------------------------------
 			if (typeof data === "string") {
-				console.log("here 1");
 				try {
-					console.log("here 2");
+					console.log("Received control message as string:", data);
 					const message = JSON.parse(data);
-					console.log("here 3");
 					console.log("Received control message:", message);
-					console.log("here 4");
 					if (message && message.type === "hangup") {
 						this.handleRemoteHangup(message);
 						return;
 					}
-					console.log("here 5");
 
 					if (message && message.type === "hangup_ack") {
 						this.handleHangupAck(message);
 						return;
 					}
-					console.log("here 6");
 
 					if (message && message.type === "packetCount") {
 						console.log("Expected packet count:", message.count);
-						state.compressionManager.setExpectedPacketCount(message.count);
+						this.decompressAudio("packetCount", message.count);
+						// state.compressionManager.setExpectedPacketCount(message.count);
 						return;
 					}
 
@@ -213,7 +198,8 @@ export class WebRTCManager {
 			// -------------------------------
 			if (data instanceof ArrayBuffer) {
 				//these are individual Opus packets
-				await state.compressionManager.addOpusPacket(new Uint8Array(data));
+				this.decompressAudio("opusPacket", data);
+				// await state.compressionManager.addOpusPacket(new Uint8Array(data));
 				return;
 			}
 

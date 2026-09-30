@@ -125,7 +125,17 @@ export class CompressionManager {
 		return packets; // array of Uint8Array
 	}
 
-	setExpectedPacketCount(count) {
+	async handleIncoming(type, data) {
+		if (type === "opusPacket") {
+			await this._addOpusPacket(new Uint8Array(data));
+		} else if (type === "packetCount") {
+			this._setExpectedPacketCount(data);
+		} else {
+			console.warn("Unknown incoming message type:", type);
+		}
+	}
+
+	_setExpectedPacketCount(count) {
 		this.expectedPacketCount = count;
 	}
 
@@ -135,7 +145,7 @@ export class CompressionManager {
 	 *
 	 * @param {Uint8Array} packet - The Opus packet to decode.
 	 */
-	async addOpusPacket(packet) {
+	async _addOpusPacket(packet) {
 		if (!this.decoder) {
 			this.setStatus("Decoder not initialized.");
 			return;
