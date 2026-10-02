@@ -294,6 +294,20 @@ function ensureManagers() {
 
 				// return;
 
+				//print size reduction debug
+				const originalSize = int16Array.byteLength;
+				const compressedSize = packets.reduce(
+					(acc, buf) => acc + buf.byteLength,
+					0,
+				);
+				console.log("Original audio size (bytes):", originalSize);
+				console.log("Compressed audio size (bytes):", compressedSize);
+				console.log("Size reduction (bytes):", originalSize - compressedSize);
+				console.log(
+					"Size reduction (%):",
+					(compressedSize / originalSize) * 100,
+				);
+
 				console.log("sending compressed audio snippet.");
 
 				//log total packet count
