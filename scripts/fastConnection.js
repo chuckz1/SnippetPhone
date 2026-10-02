@@ -68,11 +68,11 @@ export class FastConnectionManager {
 	sendFastUrlWithText(username) {
 		const fastUrl = this._createFastUrl(username);
 		const message =
-			"Hi, this is " +
+			fastUrl +
+			"\n Hi, this is " +
 			username +
 			". I am in a poor cell connection and need to reach you. " +
-			"Please use this link to connect with me in SnippetPhone: " +
-			fastUrl +
+			"Please use this link to connect with me in SnippetPhone. " +
 			" \n\nThis app lets us send short voice snippets instead of depending on a strong connection.";
 		window.open(`sms:?body=${encodeURIComponent(message)}`, "_blank");
 	}
