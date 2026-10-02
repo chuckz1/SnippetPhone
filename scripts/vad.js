@@ -141,7 +141,7 @@ export class VADManager {
 
 		if (!this.workletLoaded) {
 			await this.audioContext.audioWorklet.addModule(
-				"/streaming-recorder-worklet.js",
+				"streaming-recorder-worklet.js",
 			);
 			this.workletLoaded = true;
 		}
