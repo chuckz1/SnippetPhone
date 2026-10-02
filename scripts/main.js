@@ -342,9 +342,9 @@ function ensureManagers() {
 			onSpeechStart: () => {
 				setStatus("Speech detected. Capturing VAD snippet.");
 			},
-			// onSpeechEnd: async (audioChunk) => {
-			// 	await vadAudioOut(audioChunk);
-			// },
+			onSpeechEnd: async (audioChunk) => {
+				await vadAudioOut(audioChunk);
+			},
 			onStreamingChunk: async (chunk) => {
 				await vadAudioOut(chunk);
 			},
