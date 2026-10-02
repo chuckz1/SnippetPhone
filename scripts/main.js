@@ -232,15 +232,17 @@ async function vadAudioOut(audioChunk) {
 	//print size reduction debug
 	const originalSize = int16Array.byteLength;
 	const compressedSize = packets.reduce((acc, buf) => acc + buf.byteLength, 0);
-	console.log("Original audio size (bytes):", originalSize);
-	console.log("Compressed audio size (bytes):", compressedSize);
-	console.log("Size reduction (bytes):", originalSize - compressedSize);
-	console.log("Size reduction (%):", (compressedSize / originalSize) * 100);
+	console.log("Audio size summary:", {
+		originalBytes: originalSize,
+		compressedBytes: compressedSize,
+		reductionBytes: originalSize - compressedSize,
+		reductionPercent: (compressedSize / originalSize) * 100,
+	});
 
 	console.log("sending compressed audio snippet.");
 
-	//log total packet count
-	console.log("Total number of packets to be sent:", packets.length);
+	// //log total packet count
+	// console.log("Total number of packets to be sent:", packets.length);
 	// Send the total packet count to the remote side.
 	state.webrtc.sendControlMessage({
 		type: "packetCount",
