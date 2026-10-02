@@ -10,3 +10,4 @@
 - [x] imporove error messages to basic user can understand what is going wrong
 - [x] add mute and stop call buttons
 - [x] switch to node server
+- [x] compression of audio snippets
