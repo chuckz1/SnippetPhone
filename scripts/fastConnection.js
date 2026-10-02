@@ -69,7 +69,7 @@ export class FastConnectionManager {
 		const fastUrl = this._createFastUrl(username);
 		const message =
 			fastUrl +
-			"\n Hi, this is " +
+			"\n\n Hi, this is " +
 			username +
 			". I am in a poor cell connection and need to reach you. " +
 			"Please use this link to connect with me in SnippetPhone. " +
