@@ -4,7 +4,8 @@ import { SignalingManager } from "./signaling.js";
 import { UserManager } from "./userManager.js";
 import { FastConnectionManager } from "./fastConnection.js";
 import { CompressionManager } from "./compression.js";
-//bump
+import { AudioManager } from "./audioManager.js";
+
 const state = {
 	webrtc: null,
 	vad: null,
@@ -12,6 +13,7 @@ const state = {
 	userManager: null,
 	fastConnectionManager: null,
 	compressionManager: null,
+	audioManager: null,
 };
 
 //not used
@@ -195,6 +197,12 @@ function ensureManagers() {
 		});
 	}
 
+	if (!state.audioManager) {
+		state.audioManager = new AudioManager({
+			onStatus: setStatus,
+		});
+	}
+
 	if (!state.webrtc) {
 		state.webrtc = new WebRTCManager({
 			onStatus: setStatus,
@@ -261,25 +269,30 @@ function ensureManagers() {
 						? audioChunk
 						: new Float32Array(audioChunk);
 
-				const sourceSampleRate = state.vad.inputSampleRate;
-				const normalizedFloatArray = resampleTo16k(
-					floatArray,
-					sourceSampleRate,
-				);
-
-				const int16Array = new Int16Array(normalizedFloatArray.length);
-				for (let index = 0; index < normalizedFloatArray.length; index += 1) {
-					const clamped = Math.max(
-						-1,
-						Math.min(1, normalizedFloatArray[index]),
-					);
+				// Convert the Float32Array to Int16Array for compression.
+				const int16Array = new Int16Array(floatArray.length);
+				for (let index = 0; index < floatArray.length; index += 1) {
+					const clamped = Math.max(-1, Math.min(1, floatArray[index]));
 					int16Array[index] = Math.round(clamped * 32767);
 				}
+
+				// // Play the captured audio snippet locally for monitoring.
+				// if (state.audioManager) {
+				// 	state.audioManager.playAudio(int16Array);
+				// }
 
 				console.log("Compressing audio snippet before sending.");
 
 				// Compress the audio buffer before sending it over the WebRTC data channel.
 				const packets = await state.compressionManager.compress(int16Array);
+
+				// //for testing play the packets locally
+				// state.compressionManager.handleIncoming("packetCount", packets.length);
+				// for (let i = 0; i < packets.length; i += 1) {
+				// 	state.compressionManager.handleIncoming("opusPacket", packets[i]);
+				// }
+
+				// return;
 
 				console.log("sending compressed audio snippet.");
 
@@ -488,35 +501,6 @@ function shareFastConnectionVia(methodName) {
 	setStatus(
 		`Opening ${methodName === "sendFastUrlWithText" ? "text" : "email"} share flow for ${username}.`,
 	);
-}
-
-function resampleTo16k(input, sourceSampleRate = 48000) {
-	const targetSampleRate = 16000;
-	if (!input || input.length === 0 || sourceSampleRate <= 0) {
-		return input;
-	}
-
-	if (sourceSampleRate === targetSampleRate) {
-		return input;
-	}
-
-	const durationSeconds = input.length / sourceSampleRate;
-	const targetLength = Math.max(
-		1,
-		Math.round(durationSeconds * targetSampleRate),
-	);
-	const output = new Float32Array(targetLength);
-
-	for (let i = 0; i < targetLength; i += 1) {
-		const sourceIndex = (i / targetSampleRate) * sourceSampleRate;
-		const index = Math.floor(sourceIndex);
-		const fraction = sourceIndex - index;
-		const left = input[index] ?? input[input.length - 1];
-		const right = input[index + 1] ?? input[input.length - 1];
-		output[i] = left + (right - left) * fraction;
-	}
-
-	return output;
 }
 
 function toggleVad() {

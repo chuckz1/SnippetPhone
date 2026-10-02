@@ -33,7 +33,7 @@ export class VADManager {
 
 		try {
 			const stream = await navigator.mediaDevices.getUserMedia({
-				audio: TextTrackCueList,
+				audio: true,
 				video: false,
 			});
 			this.stream = stream;
@@ -81,7 +81,7 @@ export class VADManager {
 				this.onSpeechStart();
 			},
 			onSpeechEnd: (audio) => {
-				this.testPlayAudio(audio);
+				// this.testPlayAudio(audio);
 				if (this.muted) {
 					return;
 				}
@@ -106,44 +106,5 @@ export class VADManager {
 	toggleMuted() {
 		this.muted = !this.muted;
 		return this.muted;
-	}
-
-	testPlayAudio(audioBuffer) {
-		try {
-			// Lazy init AudioContext
-			if (!this.audioContext) {
-				const AudioCtor = window.AudioContext || window.webkitAudioContext;
-				this.audioContext = new AudioCtor({ sampleRate: 16000 });
-			}
-
-			// Resume if suspended (Chrome auto-suspends)
-			if (this.audioContext.state === "suspended") {
-				this.audioContext.resume();
-			}
-
-			// audioBuffer from VAD is Float32Array PCM @ 16kHz
-			const floatData = audioBuffer;
-			const frameCount = floatData.length;
-
-			// Create AudioBuffer
-			const buffer = this.audioContext.createBuffer(
-				1, // mono
-				frameCount,
-				16000, // MicVAD sample rate
-			);
-
-			buffer.copyToChannel(floatData, 0);
-
-			// Play it
-			const source = this.audioContext.createBufferSource();
-			source.buffer = buffer;
-			source.connect(this.audioContext.destination);
-			source.start();
-
-			this.setStatus(`Played test audio (${frameCount} samples)`);
-		} catch (err) {
-			console.error("testPlayAudio error:", err);
-			this.setStatus("Failed to play test audio");
-		}
 	}
 }
