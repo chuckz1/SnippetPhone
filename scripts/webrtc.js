@@ -125,7 +125,8 @@ export class WebRTCManager {
 			this.attachDataChannel(event.channel);
 		};
 
-		const channel = peer.createDataChannel("snippetphone");
+		// Keep audio snippets in sequence so they arrive in the same order they were sent.
+		const channel = peer.createDataChannel("snippetphone", { ordered: true });
 		this.attachDataChannel(channel);
 
 		return peer;
