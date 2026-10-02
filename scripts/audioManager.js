@@ -73,9 +73,18 @@ export class AudioManager {
 			const source = this.audioContext.createBufferSource();
 			source.buffer = buffer;
 			source.connect(this.audioContext.destination);
-			source.start();
 
-			this.setStatus(`Played test audio (${frameCount} samples)`);
+			// Queue after any audio still playing, so calls play in order
+			const now = this.audioContext.currentTime;
+			const startTime = Math.max(now, this.nextStartTime || 0);
+			source.start(startTime);
+			this.nextStartTime = startTime + buffer.duration;
+
+			// this.setStatus(
+			// 	startTime > now
+			// 		? `Queued audio (${frameCount} samples)`
+			// 		: `Played test audio (${frameCount} samples)`,
+			// );
 		} catch (err) {
 			console.error("testPlayAudio error:", err);
 			this.setStatus("Failed to play test audio");

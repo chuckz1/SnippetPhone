@@ -41,6 +41,7 @@ const startIntroBtn = document.getElementById("startIntroBtn");
 const muteBtn = document.getElementById("muteBtn");
 const speakerBtn = document.getElementById("speakerBtn");
 const endCallBtn = document.getElementById("endCallBtn");
+const audioModeBtn = document.getElementById("audioModeBtn");
 
 const step0 = document.getElementById("Step0");
 const step1 = document.getElementById("Step1");
@@ -183,6 +184,88 @@ function populateUserList(users = []) {
 	activeUsersList.appendChild(list);
 }
 
+async function vadAudioOut(audioChunk) {
+	if (!audioChunk) {
+		return;
+	}
+
+	console.log("Received audio chunk:");
+
+	// console.log(
+	// 	"chunk samples:",
+	// 	audioChunk.length,
+	// 	"duration (s):",
+	// 	audioChunk.length / 16000,
+	// );
+
+	// // Play the captured audio snippet locally for monitoring.
+	// if (state.audioManager) {
+	// 	state.audioManager.playAudio(audioChunk);
+	// }
+	// return;
+
+	const floatArray =
+		audioChunk instanceof Float32Array
+			? audioChunk
+			: new Float32Array(audioChunk);
+
+	// Convert the Float32Array to Int16Array for compression.
+	const int16Array = new Int16Array(floatArray.length);
+	for (let index = 0; index < floatArray.length; index += 1) {
+		const clamped = Math.max(-1, Math.min(1, floatArray[index]));
+		int16Array[index] = Math.round(clamped * 32767);
+	}
+
+	console.log("Compressing audio snippet before sending.");
+
+	// Compress the audio buffer before sending it over the WebRTC data channel.
+	const packets = await state.compressionManager.compress(int16Array);
+
+	// //for testing play the packets locally
+	// state.compressionManager.handleIncoming("packetCount", packets.length);
+	// for (let i = 0; i < packets.length; i += 1) {
+	// 	state.compressionManager.handleIncoming("opusPacket", packets[i]);
+	// }
+
+	// return;
+
+	//print size reduction debug
+	const originalSize = int16Array.byteLength;
+	const compressedSize = packets.reduce((acc, buf) => acc + buf.byteLength, 0);
+	console.log("Original audio size (bytes):", originalSize);
+	console.log("Compressed audio size (bytes):", compressedSize);
+	console.log("Size reduction (bytes):", originalSize - compressedSize);
+	console.log("Size reduction (%):", (compressedSize / originalSize) * 100);
+
+	console.log("sending compressed audio snippet.");
+
+	//log total packet count
+	console.log("Total number of packets to be sent:", packets.length);
+	// Send the total packet count to the remote side.
+	state.webrtc.sendControlMessage({
+		type: "packetCount",
+		count: packets.length,
+	});
+
+	// console log total size of the message as bytes
+	console.log(
+		"Total size of the message to be sent:",
+		packets.reduce((acc, buf) => acc + buf.byteLength, 0),
+	);
+
+	for (let i = 0; i < packets.length; i += 1) {
+		const sent = await state.webrtc.sendSnippet(packets[i]);
+		// console.log(`Compressed audio snippet ${i + 1} sent:`, sent);
+	}
+
+	// console.log("Compressed audio snippet sent:", sent);
+
+	// const sent = await state.webrtc.sendSnippet(compressedBuffer);
+	// if (sent) {
+	// 	setStatus("Speech snippet sent over the WebRTC data channel.");
+	// }
+}
+
 function ensureManagers() {
 	if (!state.userManager) {
 		state.userManager = new UserManager({
@@ -259,82 +342,11 @@ function ensureManagers() {
 			onSpeechStart: () => {
 				setStatus("Speech detected. Capturing VAD snippet.");
 			},
-			onSpeechEnd: async (audioChunk) => {
-				if (!audioChunk) {
-					return;
-				}
-
-				const floatArray =
-					audioChunk instanceof Float32Array
-						? audioChunk
-						: new Float32Array(audioChunk);
-
-				// Convert the Float32Array to Int16Array for compression.
-				const int16Array = new Int16Array(floatArray.length);
-				for (let index = 0; index < floatArray.length; index += 1) {
-					const clamped = Math.max(-1, Math.min(1, floatArray[index]));
-					int16Array[index] = Math.round(clamped * 32767);
-				}
-
-				// // Play the captured audio snippet locally for monitoring.
-				// if (state.audioManager) {
-				// 	state.audioManager.playAudio(int16Array);
-				// }
-
-				console.log("Compressing audio snippet before sending.");
-
-				// Compress the audio buffer before sending it over the WebRTC data channel.
-				const packets = await state.compressionManager.compress(int16Array);
-
-				// //for testing play the packets locally
-				// state.compressionManager.handleIncoming("packetCount", packets.length);
-				// for (let i = 0; i < packets.length; i += 1) {
-				// 	state.compressionManager.handleIncoming("opusPacket", packets[i]);
-				// }
-
-				// return;
-
-				//print size reduction debug
-				const originalSize = int16Array.byteLength;
-				const compressedSize = packets.reduce(
-					(acc, buf) => acc + buf.byteLength,
-					0,
-				);
-				console.log("Original audio size (bytes):", originalSize);
-				console.log("Compressed audio size (bytes):", compressedSize);
-				console.log("Size reduction (bytes):", originalSize - compressedSize);
-				console.log(
-					"Size reduction (%):",
-					(compressedSize / originalSize) * 100,
-				);
-
-				console.log("sending compressed audio snippet.");
-
-				//log total packet count
-				console.log("Total number of packets to be sent:", packets.length);
-				// Send the total packet count to the remote side.
-				state.webrtc.sendControlMessage({
-					type: "packetCount",
-					count: packets.length,
-				});
-
-				// console log total size of the message as bytes
-				console.log(
-					"Total size of the message to be sent:",
-					packets.reduce((acc, buf) => acc + buf.byteLength, 0),
-				);
-
-				for (let i = 0; i < packets.length; i += 1) {
-					const sent = await state.webrtc.sendSnippet(packets[i]);
-					// console.log(`Compressed audio snippet ${i + 1} sent:`, sent);
-				}
-
-				// console.log("Compressed audio snippet sent:", sent);
-
-				// const sent = await state.webrtc.sendSnippet(compressedBuffer);
-				// if (sent) {
-				// 	setStatus("Speech snippet sent over the WebRTC data channel.");
-				// }
+			// onSpeechEnd: async (audioChunk) => {
+			// 	await vadAudioOut(audioChunk);
+			// },
+			onStreamingChunk: async (chunk) => {
+				await vadAudioOut(chunk);
 			},
 		});
 	}
@@ -540,6 +552,14 @@ function endCall() {
 	state.webrtc.hangUpCall();
 }
 
+function toggleAudioMode() {
+	ensureManagers();
+	const mode = state.vad.toggleMode();
+	audioModeBtn.textContent =
+		mode === "standard" ? "Standard Mode" : "Streaming Mode";
+	console.log(`Audio mode toggled to ${mode}.`);
+}
+
 startMicBtn.addEventListener("click", async () => {
 	await startMicrophone();
 });
@@ -599,6 +619,10 @@ speakerBtn.addEventListener("click", async () => {
 endCallBtn.addEventListener("click", async () => {
 	console.log("Ending the call.");
 	await endCall();
+});
+
+audioModeBtn.addEventListener("click", async () => {
+	await toggleAudioMode();
 });
 
 //#endregion
